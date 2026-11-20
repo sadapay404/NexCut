@@ -33,9 +33,10 @@ OPENAI_ENDPOINT = "{base}/chat/completions"
 # now self-heals (see _suggested_model), so this list is a starting point, not law.
 GEMINI_MODELS = [
     "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.5-flash",
     "gemini-2.5-flash",
     "gemini-2.5-pro",
-    "gemini-2.0-flash",
 ]
 OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"]
 
@@ -142,6 +143,12 @@ class _HttpProvider:
                 raise ProviderError(
                     f"{label} was not found at this provider: {detail}",
                     hint="Set NEXCUT_MODELS to a model your key can use, then restart.",
+                ) from exc
+            if "model name format" in detail or "unexpected model name" in detail:
+                raise ProviderError(
+                    "That model id is not in a form Google accepts.",
+                    hint="Copy an id from `python3 tools/check_key.py --list` and set "
+                         "NEXCUT_MODELS to it, then restart.",
                 ) from exc
             raise ProviderError(f"Provider error {exc.code}: {detail}") from exc
         except urllib.error.URLError as exc:

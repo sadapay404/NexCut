@@ -81,3 +81,11 @@ class HealthCheckReportsRealErrors(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_bad_model_name_gets_a_list_hint(self):
+        with mock.patch("urllib.request.urlopen", side_effect=http_error(
+            400, '{"error":{"message":"* GenerateContentRequest.model: unexpected model name format"}}')
+        ):
+            with self.assertRaises(providers.ProviderError) as ctx:
+                providers.GeminiProvider("k", timeout=5)._attempt("x", "s", "u", "k")
+        self.assertIn("--list", ctx.exception.hint)
