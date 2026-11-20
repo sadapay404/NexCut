@@ -30,11 +30,14 @@
   --red:       #e09189;
   --radius:    14px;
 
+  color-scheme: dark;
+
   --topbar-h: 58px;
   --credits-h: 34px;
 }
 
 body.light {
+  color-scheme: light;
   --bg:        #f4efe4;
   --bg-glow-1: rgba(150, 112, 32, .10);
   --bg-glow-2: rgba(150, 112, 32, .06);
@@ -78,6 +81,8 @@ body {
 h1, h2, h3, h4, p { margin: 0; }
 button { cursor: pointer; font: inherit; color: inherit; }
 button:disabled { cursor: default; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; }
 ::selection { background: var(--gold-dim); }
 
 .ic { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }

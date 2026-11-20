@@ -208,7 +208,7 @@ function wire() {
     const url = $("ytUrl").value.trim();
     if (!url) {
       S.caption = { state: "idle", detail: "No link" };
-      note($("sourceState"), "No source");
+      note($("sourceState"), "No source — paste a link, or open Transcript.");
       renderSummary();
       return;
     }
