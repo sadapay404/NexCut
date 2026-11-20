@@ -33,11 +33,14 @@ export NEXCUT_MODELS=gemini-2.5-flash,gemini-2.5-pro
 python3 -m nexcut.server
 ```
 
-Your key comes from the environment — nothing is typed into the browser:
+Your key comes from the environment — nothing is typed into the browser. The
+server reads a `.env` in the repo root on start (real environment variables win):
 
 ```bash
-export NEXCUT_PROVIDER=gemini
-export NEXCUT_API_KEY=...        # or put it in a .env you source before start
+cp .env.example .env    # then edit
+# NEXCUT_PROVIDER=gemini
+# NEXCUT_API_KEY=...
+python3 -m nexcut.server
 ```
 
 `NEXCUT_BACKUP_KEY` is the second key in the failover chain. The UI never sees or
@@ -68,7 +71,7 @@ settings. See `prompts/README.md`; start from `prompts/master.example.md`.
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests -v      # 93 backend/contract tests
+python3 -m unittest discover -s tests -v      # 98 backend/contract tests
 npm install && npm run test:ui                # 27 UI assertions (jsdom, no browser)
 ```
 

@@ -78,4 +78,4 @@ status line names which of the three methods failed.
 | `prompts/` | your prompt |
 | `data/` | source cache and cut output (git-ignored, pruned after 3 days) |
 
-93 tests: `python3 -m unittest discover -s tests`
+98 tests: `python3 -m unittest discover -s tests`

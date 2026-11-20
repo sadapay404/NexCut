@@ -367,6 +367,24 @@ def _extract_upload(raw: bytes, ctype: str) -> str:
     return ""
 
 
+def load_dotenv(path: str | Path = ".env") -> None:
+    """Read KEY=VALUE pairs from .env without overriding real environment vars."""
+    file = Path(path)
+    if not file.is_file():
+        return
+    for line in file.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        if key.startswith("export "):
+            key = key[len("export "):].strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
 def serve(port: int | None = None, host: str = "0.0.0.0") -> None:
     port = port or int(os.environ.get("NEXCUT_PORT", "8137"))
     httpd = ThreadingHTTPServer((host, port), Handler)
@@ -378,4 +396,5 @@ def serve(port: int | None = None, host: str = "0.0.0.0") -> None:
 
 
 if __name__ == "__main__":
+    load_dotenv()
     serve()
