@@ -149,8 +149,9 @@ class GeminiProvider(_HttpProvider):
                 "maxOutputTokens": 8192,
             },
         }
-        url = GEMINI_ENDPOINT.format(model=resolve_model(model)) + f"?key={key}"
-        payload = self._post(url, body, {})
+        url = GEMINI_ENDPOINT.format(model=resolve_model(model))
+        # ?key= for older keys, header for the newer AQ.… AI Studio keys: send both
+        payload = self._post(url + f"?key={key}", body, {"x-goog-api-key": key})
         try:
             parts = payload["candidates"][0]["content"]["parts"]
             text = "".join(p.get("text", "") for p in parts)

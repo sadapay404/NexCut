@@ -17,9 +17,10 @@ from __future__ import annotations
 import io
 import json
 import mimetypes
-import zipfile
 import os
 import re
+import time
+import zipfile
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -122,6 +123,42 @@ MANAGER = JobManager(_provider_factory)
 CUT_MANAGER = CutManager()
 
 
+DEFAULT_MODEL = "gemini-2.5-flash"
+
+
+def key_status() -> tuple[int, dict]:
+    """One tiny model call: proves the key in .env works before a real run."""
+    from .providers import ProviderError, make_provider  # noqa: PLC0415
+
+    model = os.environ.get("NEXCUT_MODEL", "").strip() or DEFAULT_MODEL
+    try:
+        provider = make_provider("")
+    except Exception as exc:  # noqa: BLE001
+        return 502, {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+    if getattr(provider, "name", "") == "stub":
+        return 200, {"ok": True, "provider": "stub", "model": "offline-demo", "ms": 0,
+                     "reply": "demo provider — no key is in use"}
+    started = time.monotonic()
+    try:
+        text, used = provider.complete(
+            system="You are a health check. Answer with one word only.",
+            user="Reply with the single word READY.",
+            model=model,
+            cascade=False,
+        )
+    except ProviderError as exc:
+        hint = getattr(exc, "hint", "") or ""
+        if not hint and "rejected" in str(exc).lower():
+            hint = ("Copy the whole key from AI Studio, then restart the server "
+                    "so .env is read again.")
+        return 502, {"ok": False, "detail": str(exc), "hint": hint}
+    except Exception as exc:  # noqa: BLE001 - report, never 500 the check
+        return 502, {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+    return 200, {"ok": True, "provider": getattr(provider, "name", "?"), "model": used,
+                 "ms": int((time.monotonic() - started) * 1000),
+                 "reply": (text or "").strip()[:60]}
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "NexCut"
     protocol_version = "HTTP/1.1"
@@ -141,6 +178,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def _json(self, status: int, payload) -> None:
         self._send(status, json.dumps(payload, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+
+    def _key_check(self) -> None:
+        code, body = key_status()
+        self._json(code, body)
 
     def _error(self, status: int, detail: str) -> None:
         self._json(status, {"detail": detail})
@@ -204,6 +245,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._cut_file(m.group(1), m.group(2))
             if path == "/api/health":
                 return self._json(200, {"ok": True, "version": __version__})
+            if path == "/api/health/key":
+                return self._key_check()
             m = re.fullmatch(r"/api/jobs/([A-Za-z0-9_-]+)", path)
             if m:
                 job = MANAGER.get(m.group(1))
