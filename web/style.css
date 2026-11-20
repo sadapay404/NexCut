@@ -74,7 +74,7 @@ body {
     radial-gradient(820px 520px at -5% 105%, var(--bg-glow-2), transparent 60%),
     var(--bg);
   display: grid;
-  grid-template-rows: var(--topbar-h) minmax(0, 1fr) var(--credits-h);
+  grid-template-rows: var(--topbar-h) minmax(0, 1fr) auto;
 }
 
 [hidden] { display: none !important; }
@@ -363,6 +363,7 @@ textarea {
 .fail-head .ico { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: rgba(224, 145, 137, .14); color: var(--red); }
 .fail-head h2 { font-size: 14.5px; font-weight: 600; }
 .fail-msg { font-size: 12.5px; color: var(--text-2); overflow-wrap: anywhere; }
+.fail-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .fail-hint { border-left: 2px solid var(--gold); background: rgba(255, 255, 255, .03); border-radius: 0 6px 6px 0; padding: 8px 10px; font-size: 11.5px; color: var(--text-2); }
 
 /* ── failure ────────────────────────────────────────────────────────── */
@@ -508,13 +509,25 @@ pre.raw { margin: 0; padding: 12px 20px 24px; font: 11px/1.7 var(--mono); color:
 .note.pad { padding: 14px 20px; }
 
 /* export strip */
+/* a version is not a label — keep its own casing */
+#buildTag { text-transform: none; letter-spacing: .04em; }
+
 /* ── credits, toasts ────────────────────────────────────────────────── */
 .credits {
   display: grid; place-items: center;
-  font-size: 11px; color: var(--text-4); letter-spacing: .01em;
+  min-height: var(--credits-h);
+  padding: 5px 16px;
+  font-size: 11px; line-height: 1.45; color: var(--text-4); letter-spacing: .01em;
+  text-align: center; text-wrap: balance; overflow-wrap: break-word;
   border-top: 1px solid var(--line);
 }
-.credits b { color: var(--text-2); font-weight: 600; }
+.credits > span { display: block; max-width: 100%; }
+/* the two names are the point of the line: brighter, heavier, slightly spaced */
+.credits b {
+  color: var(--text); font-weight: 700; letter-spacing: .02em;
+  white-space: nowrap;
+}
+.credits .amp { color: var(--text-4); }
 
 .toasts { position: fixed; right: 14px; bottom: 46px; display: grid; gap: 5px; justify-items: end; z-index: 90; }
 .toast {

@@ -91,10 +91,16 @@ the LAN URL it should be opened at, e.g. `http://192.168.1.24:8137`.
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests -v      # 219 backend/contract tests
-npm install && npm run test:ui                # 40 UI assertions (jsdom, no browser)
+python3 -m unittest discover -s tests -v      # 226 backend/contract tests
+npm install && npm run test:ui                # 52 UI assertions (jsdom, no browser)
 node tools/ui_audit.js                        # static UI audit: handlers, breakpoints, a11y
 ```
+
+`tests/test_provider_contract.py` exists because the whole suite runs on the
+offline stub: it reads the `provider.complete(...)` call site out of `jobs.py`
+with `ast` and fails if any provider class cannot accept those keywords. That is
+the bug that made every real run die with *"complete() got an unexpected keyword
+argument 'ctx'"* while 219 stub-based tests stayed green.
 
 The UI harness boots `web/index.html` + `web/app.js` against a stubbed API and
 fails on any exception, any `console.error`, or any empty critical node. It does

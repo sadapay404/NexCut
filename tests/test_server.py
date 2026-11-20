@@ -252,5 +252,49 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(status, 200)
 
 
+    # The pipeline must run against an HTTP provider, not just the offline stub.
+    # Regression: jobs.py passed ctx=... to provider.complete(); the stub accepted
+    # it, _HttpProvider did not, so every real run died with a TypeError after the
+    # captions had already been fetched.
+    def test_cloudflare_shaped_provider_finishes_a_job(self):
+        from nexcut import server as server_module
+        from nexcut.providers import CloudflareProvider, StubProvider
+
+        answer = StubProvider()._compose(transcript=SAMPLE, window="40-50", num_clips=5)
+        provider = CloudflareProvider("test-token")
+
+        def fake_attempt(model, system, user, key):
+            provider.served_model = model
+            return json.dumps(answer)
+
+        with mock.patch.object(provider, "_attempt", side_effect=fake_attempt), \
+                mock.patch.object(server_module.MANAGER, "_provider_factory",
+                                  lambda api_key: provider):
+            job_id, job = self.run_job(num_clips=5)
+
+        self.assertEqual(job["status"], "done", job.get("error"))
+        self.assertNotIn("unexpected keyword", (job.get("error") or ""))
+        status, result = self.get(f"/api/jobs/{job_id}/results")
+        self.assertEqual(status, 200)
+        self.assertTrue(result["clips"], "the gate kept nothing")
+
+    def test_internal_error_is_reported_without_a_traceback_dump(self):
+        from nexcut import server as server_module
+
+        class Exploding:
+            def complete(self, **kwargs):
+                raise TypeError("complete() got an unexpected keyword argument 'ctx'")
+
+        with mock.patch.object(server_module.MANAGER, "_provider_factory",
+                               lambda api_key: Exploding()), \
+                mock.patch("nexcut.jobs.traceback.print_exc") as printed:
+            job_id, job = self.run_job()
+
+        self.assertEqual(job["status"], "error")
+        self.assertTrue(job["error"].startswith("TypeError:"))
+        self.assertIn("traceback", job["error_hint"].lower())
+        self.assertEqual(printed.call_count, 1, "the traceback must reach the terminal")
+
+
 if __name__ == "__main__":
     unittest.main()

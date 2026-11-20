@@ -55,6 +55,7 @@ const RESULTS = {
 };
 
 let failTranscript = false;   // toggled by the failure-path test below
+let failRun = false;          // a run that dies inside the server (the ctx bug)
 
 function makeFetch(log) {
   return async (url, opts = {}) => {
@@ -71,8 +72,13 @@ function makeFetch(log) {
       if (failTranscript) return json({ detail: "NO CAPTIONS", hint: "Paste a transcript instead." }, 502);
       return json(TRANSCRIPT);
     }
-    if (u.includes("/api/extract")) return json({ job_id: "job1" });
+    if (u.includes("/api/extract")) return json({ job_id: failRun ? "jobfail" : "job1" });
     if (u.match(/\/api\/jobs\/[^/]+\/results/)) return json(RESULTS);
+    if (u.includes("/api/jobs/jobfail")) return json({
+      status: "error", progress: 56, stage: "Failed", elapsed_s: 0.4, warnings: [],
+      error: "TypeError: _HttpProvider.complete() got an unexpected keyword argument 'ctx'",
+      error_hint: "NexCut itself broke here — nothing you did.",
+    });
     if (u.match(/\/api\/jobs\/[^/]+$/)) return json({
       status: "done", progress: 100, stage: "Done", error: null, elapsed_s: 1.2, warnings: [],
     });
@@ -133,6 +139,19 @@ function makeFetch(log) {
   sel('#lenSeg button[data-len="40-50"]').click();
   checks["custom length hidden"] = $("customLen").hidden;
 
+  // out-of-range counts are clamped where the user can see it, not silently on the server
+  $("numClips").value = "3";
+  $("numClips").dispatchEvent(new window.Event("input"));
+  $("numClips").dispatchEvent(new window.Event("change"));
+  checks["clamped low"] = $("numClips").value + "|" + $("clipCountBadge").textContent.trim();
+  $("numClips").value = "99";
+  $("numClips").dispatchEvent(new window.Event("input"));
+  $("numClips").dispatchEvent(new window.Event("change"));
+  checks["clamped high"] = $("numClips").value + "|" + $("clipCountBadge").textContent.trim();
+  $("numClips").value = "7";
+  $("numClips").dispatchEvent(new window.Event("input"));
+  $("numClips").dispatchEvent(new window.Event("change"));
+
   // paste a link → details
   $("ytUrl").value = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
   $("ytUrl").dispatchEvent(new window.Event("input"));
@@ -141,6 +160,10 @@ function makeFetch(log) {
   checks["fact title"] = $("factTitle").textContent.trim();
   checks["fact length"] = $("factLength").textContent.trim();
   checks["side label details"] = $("sideLabel").textContent.trim();
+  // the badge is a state, not the raw video id
+  checks["detail badge"] = $("detailBadge").textContent.trim();
+  checks["badge keeps id as tooltip"] = $("detailBadge").title;
+  checks["config hint"] = $("configHint").textContent.trim();
 
   // own transcript drawer
   $("ownTranscript").click();
@@ -210,7 +233,31 @@ function makeFetch(log) {
   checks["failed fetch still opens details"] = !$("setupPane").hidden;
   checks["failed fetch badge"] = $("detailBadge").textContent.trim();
   checks["failed fetch drawer"] = !$("ownTranscriptBox").hidden;
+  checks["credits text"] = $("credits").textContent.replace(/\s+/g, " ").trim();
+  checks["credits bold names"] = [...$("credits").querySelectorAll("b")].map((b) => b.textContent.trim()).join("+");
   failTranscript = false;
+  $("newRunBtn").click();
+  await new Promise((r) => setTimeout(r, 30));
+
+  // a run that dies inside the server: readable title, retry, and a way to report it
+  failRun = true;
+  $("ytUrl").value = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+  $("ytUrl").dispatchEvent(new window.Event("input"));
+  await new Promise((r) => setTimeout(r, 900));
+  $("runBtn").click();
+  await new Promise((r) => setTimeout(r, 1700));
+  checks["error pane"] = !$("errorPane").hidden;
+  checks["error title"] = $("errorPane").querySelector("h2")
+    ? $("errorPane").querySelector("h2").textContent.trim() : "";
+  checks["error buttons"] = [...$("errorPane").querySelectorAll("button")]
+    .map((b) => b.textContent.trim()).join(" / ");
+  checks["run button re-armed"] = $("runBtn").disabled === false;
+  failRun = false;
+  const retryBtn = [...$("errorPane").querySelectorAll("button")]
+    .find((b) => b.textContent.trim() === "Try again");
+  if (retryBtn) retryBtn.click();
+  await new Promise((r) => setTimeout(r, 3400));
+  checks["retry reaches results"] = !$("resultsPane").hidden;
   $("newRunBtn").click();
   await new Promise((r) => setTimeout(r, 30));
 
@@ -236,16 +283,30 @@ function makeFetch(log) {
     "back to cutter", "credits in footer", "back to landing", "credits under the bar",
     "failed fetch still opens details", "failed fetch drawer",
     "copy control", "copy fallback no crash", "copy fallback toast", "theme toggle no crash",
+    "badge keeps id as tooltip", "error pane", "run button re-armed", "retry reaches results",
   ];
   const mustBeNonZero = ["length presets", "clip rows", "download links", "packaging fields"];
+  const mustContain = {
+    "credits text": ["Proudly Created by", "Sheikh Arsalan", "in Collaboration with", "Mubashir"],
+    "config hint": ["1080p"],
+  };
   const expected = { "failed fetch badge": "no captions", "clips min": "5", "clips max": "15", "default length": "40-50",
     "clip badge auto": "AUTO", "clip badge manual": "7 clips", "asked": "7",
+    "detail badge": "ready",
+    "error title": "NexCut hit a bug",
+    "error buttons": "Try again / New link / Copy details", "clamped low": "5|5 clips", "clamped high": "15|15 clips",
+    "credits bold names": "Sheikh Arsalan+Mubashir",
     "zip href": "/api/cuts/cut1/zip" };
 
   const fail = [];
   mustBeTrue.forEach((k) => { if (!checks[k]) fail.push(`${k} = ${checks[k]}`); });
   mustBeNonZero.forEach((k) => { if (!checks[k]) fail.push(`${k} = ${checks[k]}`); });
   Object.entries(expected).forEach(([k, v]) => { if (String(checks[k]) !== v) fail.push(`${k} = ${checks[k]} (want ${v})`); });
+  Object.entries(mustContain).forEach(([k, words]) => {
+    words.forEach((w) => {
+      if (!String(checks[k] || "").includes(w)) fail.push(`${k} is missing "${w}" → ${checks[k]}`);
+    });
+  });
 
   if (errors.length) {
     console.log("\n── errors");

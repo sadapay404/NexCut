@@ -223,6 +223,7 @@ function wire() {
   });
 
   $("numClips").addEventListener("input", updateClipBadge);
+  $("numClips").addEventListener("change", settleClipCount);
 
   $("lenSeg").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-len]");
@@ -285,12 +286,25 @@ function setLength(value) {
   $("customLen").hidden = value !== "custom";
 }
 
-function updateClipBadge() {
+function clipCount() {
   const raw = $("numClips").value.trim();
   const n = parseInt(raw, 10);
-  const auto = !raw || !n;
-  $("clipCountBadge").textContent = auto ? "AUTO" : `${n} clips`;
-  $("clipCountBadge").style.opacity = auto ? "1" : "1";
+  if (!raw || !n) return 0;                       // 0 = AUTO
+  const min = Number($("numClips").min) || 5;
+  const max = Number($("numClips").max) || 15;
+  return Math.max(min, Math.min(max, n));
+}
+
+function updateClipBadge() {
+  const n = clipCount();
+  $("clipCountBadge").textContent = n ? `${n} clips` : "AUTO";
+}
+
+/* an out-of-range number was silently corrected on the server; show it here */
+function settleClipCount() {
+  const n = clipCount();
+  if (n) $("numClips").value = String(n);
+  updateClipBadge();
 }
 
 const transcriptText = () => {
@@ -348,7 +362,8 @@ function fillDetails(data) {
     ? `${data.lines} lines · ${(data.text || "").length.toLocaleString()} characters`
     : "—";
   $("factNiche").textContent = "detected by the model on extract";
-  $("detailBadge").textContent = data.video_id ? data.video_id : "ready";
+  $("detailBadge").textContent = "ready";
+  $("detailBadge").title = data.video_id ? `video id ${data.video_id}` : "";
   $("detailBadge").style.borderColor = "";
   $("detailBadge").style.color = "";
 }
@@ -377,8 +392,6 @@ async function loadFile(file) {
 
 /* ── step 2: extract ─────────────────────────────────── */
 function readPayload() {
-  const raw = $("numClips").value.trim();
-  const n = parseInt(raw, 10);
   const custom = S.len === "custom";
   return {
     youtube_url: S.link || $("ytUrl").value.trim(),
@@ -386,7 +399,7 @@ function readPayload() {
     niche: "auto",
     audience: "U.S. English",
     language: "U.S. English",
-    num_clips: raw && n ? n : 0,
+    num_clips: clipCount(),
     window: custom ? "custom" : S.len,
     custom_min_sec: custom ? (parseInt($("customMin").value, 10) || null) : null,
     custom_max_sec: custom ? (parseInt($("customMax").value, 10) || null) : null,
@@ -412,6 +425,10 @@ async function run() {
     return;
   }
 
+  submit(payload);
+}
+
+async function submit(payload) {
   S.payload = payload;
   S.result = null;
   S.files = [];
@@ -487,6 +504,9 @@ function titleFor(message) {
   if (m.includes("slow right now")) return "Model timed out";
   if (/api key/i.test(m)) return "API key rejected";
   if (/caption/i.test(m)) return "Captions unavailable";
+  if (/^(TypeError|KeyError|AttributeError|NameError|IndexError|ValueError|OSError):/.test(m)) {
+    return "NexCut hit a bug";
+  }
   return "Run failed";
 }
 
@@ -694,6 +714,7 @@ function reset() {
   S.files = [];
   S.cutId = null;
   S.jobId = null;
+  S.payload = null;
   S.open.clear();
   $("runBtn").disabled = false;
   $("ytUrl").value = "";
@@ -720,11 +741,18 @@ function renderError(title, message, detail) {
   box.appendChild(el("p", "fail-msg", message));
   if (detail) box.appendChild(el("div", "fail-hint", detail));
 
-  const back = el("button", "btn small", "Back");
+  const row = el("div", "fail-row");
+  if (S.payload) {
+    const again = el("button", "btn primary small", "Try again");
+    again.onclick = () => submit(S.payload);   // the transcript is already in hand
+    row.appendChild(again);
+  }
+  const back = el("button", "btn small", "New link");
   back.onclick = reset;
-  const row = el("div");
-  row.style.display = "flex";
   row.appendChild(back);
+  const copyBtn = el("button", "chip-btn", "Copy details");
+  copyBtn.onclick = () => copy([title, message, detail].filter(Boolean).join("\n"));
+  row.appendChild(copyBtn);
   box.appendChild(row);
   pane.appendChild(box);
   $("runBtn").disabled = false;

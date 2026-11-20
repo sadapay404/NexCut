@@ -89,3 +89,22 @@ missing handler on any control, missing breakpoint, `overflow:hidden` with no
 short-viewport escape, missing `pointer: coarse` / `:focus-visible` /
 `prefers-reduced-motion` / safe-area rules, unstyled markup classes, and a
 `#ytUrl` that is not URL-keyboard friendly.
+
+## Copy and status pass — 2026-11-20
+
+| Report | Fix |
+|---|---|
+| the Details badge showed the raw video id (`Y-ISI60GZ8K`) | badge is a state again (`ready` / `no captions`); the id lives in its tooltip |
+| "1080p MP4s, cut frame-exact." read like a spec sheet | "The clips will be in 1080p quality." |
+| the credits line was clipped at the bottom of the screen | the footer row sizes to its content (`auto`, `min-height` token) instead of a fixed 34px slot; both names are 700-weight in `--text`, the connectives stay dim |
+| the home subtitle sold on-device processing | "Paste a YouTube link to pull its captions, plan the clips and cut them." |
+| a failed run offered only "Back" (which threw the link away) | failure pane now has `Try again` (re-submits the payload, the transcript is already in hand), `New link`, and `Copy details` |
+| a crashed run showed `Unexpected failure: TypeError: …` | the title is "NexCut hit a bug", the message is the exception only, and the full traceback is printed in the server terminal |
+| an out-of-range clip count was clamped silently on the server | clamped in the field and badge too (`3` → `5`, `99` → `15`) |
+
+Root cause of the toast the user saw: `jobs.py` passed `ctx=` to
+`provider.complete()`; `StubProvider` accepted it, `_HttpProvider` (cloudflare /
+openai / gemini) did not. Every real run failed after the captions had been
+fetched — the most expensive possible point. Now guarded from both sides by
+`tests/test_provider_contract.py` and an end-to-end API test in
+`tests/test_server.py`.

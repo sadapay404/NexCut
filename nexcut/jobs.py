@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import threading
 import time
+import traceback
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -217,7 +218,10 @@ class JobManager:
             job.stage = "Failed"
         except Exception as exc:  # noqa: BLE001 - never lose the thread silently
             job.status = "error"
-            job.error = f"Unexpected failure: {type(exc).__name__}: {exc}"
+            traceback.print_exc()   # the terminal is the only place a real bug survives
+            job.error = f"{type(exc).__name__}: {exc}"
+            job.error_hint = ("NexCut itself broke here — nothing you did. The full "
+                              "traceback is printed in the terminal running the server.")
             job.stage = "Failed"
         finally:
             job.elapsed_s = time.time() - started

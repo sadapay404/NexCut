@@ -288,7 +288,10 @@ class _HttpProvider:
                           os.environ.get("NEXCUT_API_KEYS", ""))
 
     def complete(self, *, system: str, user: str, model: str, cascade: bool,
-                 budget: int | None = None) -> tuple[str, str]:
+                 budget: int | None = None, ctx: dict | None = None) -> tuple[str, str]:
+        # ctx carries the offline stub's raw material. Remote providers get the
+        # transcript inside the rendered prompt, so it is accepted and ignored —
+        # the pipeline passes it unconditionally (jobs.py).
         order = [model]
         if cascade:
             order += [m["id"] for m in model_catalog() if m["id"] != model]
