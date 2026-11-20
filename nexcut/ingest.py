@@ -118,6 +118,38 @@ def fetch_metadata(vid: str) -> dict:
 # --------------------------------------------------------------------------
 # cue parsing
 # --------------------------------------------------------------------------
+def _post_json(url: str, payload: dict, *, timeout: int = 20,
+               headers: dict | None = None) -> dict:
+    req = urllib.request.Request(
+        url, data=json.dumps(payload).encode(), method="POST",
+        headers={"User-Agent": UA, "Content-Type": "application/json",
+                 **CONSENT, **(headers or {})},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8", "replace") or "{}")
+    except urllib.error.HTTPError as exc:
+        raise IngestError(
+            f"YouTube refused the player request (HTTP {exc.code}).",
+            "Try again in a minute; if it persists, export cookies.txt from a browser "
+            "and put it in the repo root.",
+        ) from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise IngestError("Could not reach YouTube.", str(exc)[:200]) from exc
+
+
+def parse_timedtext_xml(raw: bytes) -> list[tuple[float, str]]:
+    """Classic timedtext XML -> [(seconds, text)]."""
+    text = raw.decode("utf-8", "replace")
+    out: list[tuple[float, str]] = []
+    for start, body in re.findall(
+            r'<text[^>]*\bstart="([0-9.]+)"[^>]*>(.*?)</text>', text, flags=re.S):
+        clean = _clean(body)
+        if clean:
+            out.append((float(start), clean))
+    return out
+
+
 def _clean(text: str) -> str:
     text = _TAG.sub("", text)
     text = (
@@ -280,6 +312,85 @@ def cookies_arg() -> list[str]:
 
 
 # --------------------------------------------------------------------------
+# strategy 1b: innertube player API — the same call the apps make, so it answers
+# without a browser session even when the watch page is a consent/bot wall
+# --------------------------------------------------------------------------
+INNERTUBE_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+INNERTUBE_CLIENTS = (
+    {"clientName": "ANDROID", "clientVersion": "20.10.38",
+     "androidSdkVersion": 30, "hl": "en", "gl": "US"},
+    {"clientName": "IOS", "clientVersion": "20.10.4", "deviceModel": "iPhone15,3",
+     "hl": "en", "gl": "US"},
+    {"clientName": "TVHTML5_SIMPLY_EMBEDDED_PLAYER", "clientVersion": "2.0",
+     "hl": "en", "gl": "US"},
+    {"clientName": "WEB", "clientVersion": "2.20241010.00.00", "hl": "en", "gl": "US"},
+)
+
+
+def _captions_from_player(player: dict) -> list[dict]:
+    tracks = (((player.get("captions") or {})
+               .get("playerCaptionsTracklistRenderer") or {})
+              .get("captionTracks") or [])
+    return tracks
+
+
+def _fetch_track(track: dict) -> list[tuple[float, str]]:
+    base = track.get("baseUrl") or ""
+    if not base:
+        return []
+    for suffix in ("&fmt=json3", ""):
+        try:
+            raw = _get(base + suffix, timeout=25)
+        except IngestError:
+            continue
+        lines = parse_json3(raw) if "json3" in suffix else []
+        if not lines:
+            lines = parse_timedtext_xml(raw) or parse_vtt(raw.decode("utf-8", "replace"))
+        if lines:
+            return lines
+    return []
+
+
+def _via_innertube(vid: str, language: str) -> Transcript:
+    reasons: list[str] = []
+    for client in INNERTUBE_CLIENTS:
+        try:
+            player = _post_json(
+                f"https://www.youtube.com/youtubei/v1/player?key={INNERTUBE_KEY}"
+                "&prettyPrint=false",
+                {"context": {"client": client}, "videoId": vid,
+                 "contentCheckOk": True, "racyCheckOk": True},
+            )
+        except IngestError as exc:
+            reasons.append(f"{client['clientName']}: {exc}")
+            continue
+        status = player.get("playabilityStatus") or {}
+        tracks = _captions_from_player(player)
+        if not tracks:
+            reasons.append(
+                f"{client['clientName']}: no tracks ({status.get('status', '?')}"
+                f"{', ' + status['reason'] if status.get('reason') else ''})")
+            continue
+        track = _pick_track(tracks, language)
+        if not track:
+            reasons.append(f"{client['clientName']}: no {language} track")
+            continue
+        lines = _fetch_track(track)
+        if not lines:
+            reasons.append(f"{client['clientName']}: track returned nothing")
+            continue
+        merged = consolidate(lines)
+        meta = player.get("videoDetails") or {}
+        return Transcript(
+            text=to_text(merged), lines=merged, source="innertube",
+            language=track.get("languageCode") or "", is_auto=track.get("kind") == "asr",
+            video_id=vid, title=meta.get("title") or "", channel=meta.get("author") or "",
+        )
+    raise IngestError("No caption track through YouTube's player API.",
+                      "; ".join(reasons)[:300])
+
+
+# --------------------------------------------------------------------------
 # strategy 2: yt-dlp
 # --------------------------------------------------------------------------
 def _via_ytdlp(vid: str, language: str) -> Transcript:
@@ -294,7 +405,7 @@ def _via_ytdlp(vid: str, language: str) -> Transcript:
                 f"https://www.youtube.com/watch?v={vid}",
             ]
             try:
-                subprocess.run(cmd, capture_output=True, timeout=120, check=False)
+                done = subprocess.run(cmd, capture_output=True, timeout=120, check=False)
             except (OSError, subprocess.TimeoutExpired) as exc:
                 raise IngestError("yt-dlp failed to run.", str(exc)) from exc
         else:
@@ -316,6 +427,10 @@ def _via_ytdlp(vid: str, language: str) -> Transcript:
                 raise IngestError("yt-dlp could not download captions.", str(exc)[:200]) from exc
 
         files = sorted(Path(tmp).glob("*.vtt"))
+        if not files and done.returncode != 0:
+            detail = (done.stderr or done.stdout or b"").decode("utf-8", "replace")
+            detail = " ".join(detail.strip().splitlines()[-2:])[:220] or "no output"
+            raise IngestError("yt-dlp could not fetch captions.", detail)
         if not files:
             raise IngestError("yt-dlp found no caption file for this video.", "Paste the transcript manually.")
         lines = parse_vtt(files[0].read_text(encoding="utf-8", errors="replace"))
@@ -324,6 +439,27 @@ def _via_ytdlp(vid: str, language: str) -> Transcript:
         merged = consolidate(lines)
         return Transcript(text=to_text(merged), lines=merged, source="yt-dlp", video_id=vid,
                           is_auto="auto" in files[0].name or True)
+
+
+# --------------------------------------------------------------------------
+# strategy 2c: the old timedtext endpoint (no signing, sometimes still open)
+# --------------------------------------------------------------------------
+def _via_timedtext(vid: str, language: str) -> Transcript:
+    for host in ("https://www.youtube.com/api/timedtext",
+                 "https://video.google.com/timedtext"):
+        for lang in (language, "en"):
+            try:
+                raw = _get(f"{host}?lang={lang}&v={vid}", timeout=20)
+            except IngestError:
+                continue
+            lines = parse_timedtext_xml(raw)
+            if lines:
+                merged = consolidate(lines)
+                return Transcript(text=to_text(merged), lines=merged,
+                                  source="timedtext", language=lang,
+                                  is_auto=True, video_id=vid)
+    raise IngestError("The timedtext endpoint returned no cues.",
+                      "Paste the transcript manually.")
 
 
 # --------------------------------------------------------------------------
@@ -377,7 +513,8 @@ def fetch_transcript(url_or_id: str, *, language: str = "en", use_cache: bool = 
             pass
 
     errors: list[str] = []
-    for strategy in (_via_watch_page, _via_ytdlp, _via_transcript_api):
+    for strategy in (_via_innertube, _via_watch_page, _via_ytdlp,
+                     _via_timedtext, _via_transcript_api):
         try:
             tr = strategy(vid, language)
         except IngestError as exc:

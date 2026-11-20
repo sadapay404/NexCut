@@ -110,6 +110,19 @@ class SmokeToolTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertNotIn("cutting at 1080p", out)
 
+    def test_local_transcript_skips_the_caption_fetch(self):
+        import tempfile
+        _Handler.state.clear()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "t.txt"
+            path.write_text("00:00:05 - hello there\n00:00:09 - second line\n", encoding="utf-8")
+            buffer = io.StringIO()
+            with contextlib.redirect_stdout(buffer):
+                code = smoke.main(["smoke_run.py", "https://youtu.be/x", "--no-cut",
+                                   "--transcript", str(path), "--server", self.base])
+        self.assertEqual(code, 0)
+        self.assertIn("using", buffer.getvalue())
+
     def test_missing_url_prints_usage(self):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):

@@ -3,6 +3,7 @@
 
     python3 tools/smoke_run.py https://www.youtube.com/watch?v=XXXXXXXXXXX
     python3 tools/smoke_run.py <url> --no-cut        # stop after extraction
+    python3 tools/smoke_run.py <url> --transcript t.txt   # skip the caption fetch
     python3 tools/smoke_run.py <url> --server http://localhost:8080
 
 Same endpoints the browser uses, so a failure here is a backend failure and the
@@ -67,6 +68,9 @@ def main(argv: list[str]) -> int:
     if "--server" in argv:
         server = argv[argv.index("--server") + 1]
     do_cut = "--no-cut" not in argv
+    transcript_file = None
+    if "--transcript" in argv:
+        transcript_file = argv[argv.index("--transcript") + 1]
 
     print(f"server   {server}")
     tools = call(server, "/api/tools")
@@ -74,8 +78,15 @@ def main(argv: list[str]) -> int:
           f"can_cut={tools.get('can_cut')}")
 
     print("\n[1/4] captions")
-    info = call(server, "/api/transcript", {"url": url}, timeout=180)
-    text = info.get("text") or ""
+    if transcript_file:
+        from pathlib import Path
+        text = Path(transcript_file).read_text(encoding="utf-8")
+        info = {"title": f"(local {transcript_file})", "lines": len(text.splitlines()),
+                "kind": "pasted"}
+        print(f"  using {transcript_file} — {info['lines']} lines")
+    else:
+        info = call(server, "/api/transcript", {"url": url}, timeout=180)
+        text = info.get("text") or ""
     print(f"  {info.get('title', '(no title)')}")
     print(f"  {info.get('lines', len(text.splitlines()))} caption lines, "
           f"{len(text)} chars, kind={info.get('kind', '?')}")
