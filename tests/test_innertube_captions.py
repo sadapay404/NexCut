@@ -34,9 +34,53 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(lines[0], (1.5, "hello & welcome"))
         self.assertEqual(lines[1][0], 4.0)
 
-    def test_captions_from_player(self):
-        self.assertEqual(len(ingest._captions_from_player(PLAYER_WITH_TRACKS)), 1)
-        self.assertEqual(ingest._captions_from_player(PLAYER_NO_TRACKS), [])
+    def test_read_player_response(self):
+        info = ingest.read_player_response(PLAYER_WITH_TRACKS)
+        self.assertEqual(len(info["tracks"]), 1)
+        self.assertEqual(info["title"], "Real title")
+        self.assertEqual(ingest.read_player_response(PLAYER_NO_TRACKS)["status"],
+                         "LOGIN_REQUIRED")
+
+    def test_srv3_millisecond_paragraphs(self):
+        xml = '<p t="12340" d="2000"><s>Hello</s><s> world</s></p>'
+        self.assertEqual(ingest.parse_srv3(xml), [(12.34, "Hello world")])
+
+    def test_caption_format_swap_keeps_the_signature(self):
+        url = "https://www.youtube.com/api/timedtext?v=abc&lang=en&fmt=vtt&signature=xyz"
+        swapped = ingest.with_caption_format(url, "json3")
+        self.assertIn("fmt=json3", swapped)
+        self.assertIn("signature=xyz", swapped)
+        self.assertNotIn("fmt=vtt", swapped)
+
+
+class ClientIdentity(unittest.TestCase):
+    """The identity headers must match the context, or YouTube answers 400/empty."""
+
+    def client(self, cid):
+        return next(c for c in ingest.INNERTUBE_CLIENTS if c["id"] == cid)
+
+    def test_android_vr_headers(self):
+        client = self.client("android-vr")
+        url, headers = ingest.player_request(client)
+        self.assertIn("youtubei/v1/player?key=", url)
+        self.assertEqual(headers["x-youtube-client-name"], "28")
+        self.assertEqual(headers["x-youtube-client-version"], "1.60.19")
+        self.assertEqual(headers["user-agent"], ingest.VR_UA)
+        self.assertEqual(client["context"]["client"]["clientName"], "ANDROID_VR")
+
+    def test_web_headers_and_consent_cookie(self):
+        url, headers = ingest.player_request(self.client("web"))
+        self.assertEqual(headers["x-youtube-client-name"], "1")
+        self.assertIn("clientVersion", headers["x-youtube-client-version"])
+        self.assertIn("CONSENT=", headers["cookie"])
+
+    def test_every_client_name_matches_its_numeric_id(self):
+        for client in ingest.INNERTUBE_CLIENTS:
+            with self.subTest(client=client["id"]):
+                _url, headers = ingest.player_request(client)
+                self.assertEqual(headers["x-youtube-client-name"],
+                                 str(client["client_name_id"]))
+                self.assertTrue(headers["x-youtube-client-version"])
 
 
 class InnertubeStrategy(unittest.TestCase):
@@ -50,11 +94,11 @@ class InnertubeStrategy(unittest.TestCase):
         with mock.patch.object(ingest, "_post_json", fake_post), \
              mock.patch.object(ingest, "_get", lambda url, **kw: JSON3):
             tr = ingest._via_innertube("abc", "en")
-        self.assertEqual(tr.source, "innertube")
+        self.assertTrue(tr.source.startswith("innertube:"))
         self.assertIn("00:00:00 - This is the first sentence", tr.text)
         self.assertEqual(tr.title, "Real title")
         self.assertEqual(tr.channel, "Real channel")
-        self.assertEqual(calls, ["ANDROID"])
+        self.assertEqual(calls, ["ANDROID_VR"])
 
     def test_falls_through_clients_when_blocked(self):
         clients = []
@@ -66,7 +110,7 @@ class InnertubeStrategy(unittest.TestCase):
         with mock.patch.object(ingest, "_post_json", fake_post), \
              mock.patch.object(ingest, "_get", lambda url, **kw: JSON3):
             tr = ingest._via_innertube("abc", "en")
-        self.assertEqual(clients, ["ANDROID", "IOS", "TVHTML5_SIMPLY_EMBEDDED_PLAYER"])
+        self.assertEqual(clients, ["ANDROID_VR", "WEB", "WEB_EMBEDDED_PLAYER"])
         self.assertTrue(tr.lines)
 
     def test_every_client_blocked_reports_each_reason(self):
@@ -74,7 +118,7 @@ class InnertubeStrategy(unittest.TestCase):
                                lambda *a, **kw: PLAYER_NO_TRACKS):
             with self.assertRaises(ingest.IngestError) as ctx:
                 ingest._via_innertube("abc", "en")
-        self.assertIn("ANDROID", ctx.exception.hint)
+        self.assertIn("android-vr", ctx.exception.hint)
         self.assertIn("LOGIN_REQUIRED", ctx.exception.hint)
 
     def test_empty_track_is_not_a_success(self):
@@ -88,7 +132,7 @@ class TimedtextStrategy(unittest.TestCase):
     def test_parses_legacy_xml(self):
         with mock.patch.object(ingest, "_get", lambda url, **kw: XML):
             tr = ingest._via_timedtext("abc", "en")
-        self.assertEqual(tr.source, "timedtext")
+        self.assertEqual(tr.source, "timedtext-unsigned")
         self.assertIn("hello & welcome", tr.text)
 
     def test_empty_response_is_an_error(self):
@@ -133,7 +177,7 @@ class Ordering(unittest.TestCase):
             with self.assertRaises(ingest.IngestError):
                 ingest.fetch_transcript("https://youtu.be/abcdefghijk", use_cache=False)
         self.assertEqual(calls[0], "innertube")
-        self.assertEqual(calls, ["innertube", "watch", "ytdlp", "timedtext", "api"])
+        self.assertEqual(calls, ["innertube", "timedtext", "watch", "ytdlp", "api"])
 
 
 if __name__ == "__main__":

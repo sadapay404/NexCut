@@ -33,7 +33,21 @@ UA = (
     "(KHTML, like Gecko) Chrome/122.0 Safari/537.36"
 )
 YT_ID = re.compile(r"(?:v=|youtu\.be/|shorts/|live/|embed/)([\w-]{11})")
-CONSENT = {"Cookie": "CONSENT=YES+cb; SOCS=CAI"}
+CONSENT_COOKIE = (
+    "CONSENT=YES+cb.20210328-17-p0.en+FX+410; "
+    "SOCS=CAISNQgDEitib3FfaWRlbnRpdHlmcm9udGVuZHVpc2VydmVyXzIwMjMwODI5LjA3X3AxGgJlbiACGgYIgLC_pwY"
+)
+CONSENT = {"Cookie": CONSENT_COOKIE}
+
+CHROME_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+)
+VR_UA = ("com.google.android.apps.youtube.vr.oculus/1.60.19 "
+         "(Linux; U; Android 12; GB) gzip")
+TV_UA = ("Mozilla/5.0 (PlayStation; PlayStation 4/12.00) AppleWebKit/605.1.15 "
+         "(KHTML, like Gecko) Version/16.0 Safari/605.1.15")
+INNERTUBE_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
 
 # Caption line as we hand it to the model: "HH:MM:SS - sentence"
 _TAG = re.compile(r"<[^>]+>")
@@ -254,7 +268,7 @@ def to_text(lines: list[tuple[float, str]]) -> str:
 
 
 # --------------------------------------------------------------------------
-# strategy 1: watch page caption tracks (no deps)
+# track selection (shared by every strategy)
 # --------------------------------------------------------------------------
 def _pick_track(tracks: list[dict], preferred: str = "en") -> dict | None:
     def score(t: dict) -> tuple:
@@ -265,38 +279,6 @@ def _pick_track(tracks: list[dict], preferred: str = "en") -> dict | None:
             2 if t.get("kind") != "asr" else 3
         )
     return sorted(tracks, key=score)[0] if tracks else None
-
-
-def _via_watch_page(vid: str, language: str) -> Transcript:
-    html = _get(f"https://www.youtube.com/watch?v={vid}&hl=en", timeout=25).decode("utf-8", "replace")
-    m = re.search(r'"captionTracks":(\[.*?\])', html)
-    if not m:
-        raise IngestError(
-            "This video has no captions available.",
-            "No subtitles were published and none could be auto-generated — paste a transcript instead.",
-        )
-    tracks = json.loads(m.group(1))
-    track = _pick_track(tracks, language)
-    if not track:
-        raise IngestError("No usable caption track on this video.", "Paste the transcript manually.")
-    base = track.get("baseUrl") or ""
-    if not base:
-        raise IngestError("Caption track had no URL.", "Paste the transcript manually.")
-    body = _get(base + "&fmt=json3", timeout=25)
-    lines = parse_json3(body)
-    if not lines:
-        body = _get(base, timeout=25)
-        lines = parse_vtt(body.decode("utf-8", "replace"))
-    if not lines:
-        raise IngestError("Captions came back empty.", "Paste the transcript manually.")
-    return Transcript(
-        text=to_text(consolidate(lines)),
-        lines=consolidate(lines),
-        source="youtube-captions",
-        language=track.get("languageCode") or "",
-        is_auto=track.get("kind") == "asr",
-        video_id=vid,
-    )
 
 
 def cookie_path() -> str:
@@ -312,82 +294,219 @@ def cookies_arg() -> list[str]:
 
 
 # --------------------------------------------------------------------------
-# strategy 1b: innertube player API — the same call the apps make, so it answers
-# without a browser session even when the watch page is a consent/bot wall
+# strategy 1: Innertube as several client identities
 # --------------------------------------------------------------------------
-INNERTUBE_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
-INNERTUBE_CLIENTS = (
-    {"clientName": "ANDROID", "clientVersion": "20.10.38",
-     "androidSdkVersion": 30, "hl": "en", "gl": "US"},
-    {"clientName": "IOS", "clientVersion": "20.10.4", "deviceModel": "iPhone15,3",
-     "hl": "en", "gl": "US"},
-    {"clientName": "TVHTML5_SIMPLY_EMBEDDED_PLAYER", "clientVersion": "2.0",
-     "hl": "en", "gl": "US"},
-    {"clientName": "WEB", "clientVersion": "2.20241010.00.00", "hl": "en", "gl": "US"},
+# Why several: YouTube decides *per client* whether to expose caption tracks, and
+# from a datacenter IP (Cloud Shell, VPS, CI) the WEB client often hides them or
+# answers with a sign-in wall while another identity returns them. Each entry must
+# look exactly like the real client — URL key, body context and, crucially, the
+# x-youtube-client-name / -version headers. A mismatch is answered with 400 or an
+# empty body, which reads exactly like "no captions" unless you check.
+INNERTUBE_CLIENTS: tuple[dict, ...] = (
+    {
+        "id": "android-vr", "label": "ANDROID_VR", "client_name_id": 28,
+        "headers": {"content-type": "application/json", "user-agent": VR_UA,
+                    "accept-language": "en-US,en;q=0.9"},
+        "context": {"client": {
+            "clientName": "ANDROID_VR", "clientVersion": "1.60.19",
+            "androidSdkVersion": 32, "deviceMake": "Oculus", "deviceModel": "Quest 3",
+            "osName": "Android", "osVersion": "12", "hl": "en", "gl": "US",
+            "userAgent": VR_UA}},
+        "consent": False,
+    },
+    {
+        "id": "web", "label": "WEB", "client_name_id": 1,
+        "headers": {"content-type": "application/json", "user-agent": CHROME_UA,
+                    "accept-language": "en-US,en;q=0.9",
+                    "origin": "https://www.youtube.com", "referer": "https://www.youtube.com/",
+                    "cookie": CONSENT_COOKIE},
+        "context": {"client": {"clientName": "WEB", "clientVersion": "2.20250201.00.00",
+                               "hl": "en", "gl": "US"},
+                    "user": {"lockedSafetyMode": False}},
+        "consent": True,
+    },
+    {
+        "id": "web-embedded", "label": "WEB_EMBEDDED_PLAYER", "client_name_id": 56,
+        "headers": {"content-type": "application/json", "user-agent": CHROME_UA,
+                    "accept-language": "en-US,en;q=0.9",
+                    "origin": "https://www.youtube.com", "referer": "https://www.youtube.com/",
+                    "cookie": CONSENT_COOKIE},
+        "context": {"client": {"clientName": "WEB_EMBEDDED_PLAYER",
+                               "clientVersion": "1.20250201.00.00", "hl": "en", "gl": "US"},
+                    "thirdParty": {"embedUrl": "https://www.youtube.com/"}},
+        "consent": True,
+    },
+    {
+        "id": "tv-embedded", "label": "TVHTML5_SIMPLY_EMBEDDED_PLAYER", "client_name_id": 85,
+        "headers": {"content-type": "application/json", "user-agent": TV_UA,
+                    "accept-language": "en-US,en;q=0.9",
+                    "origin": "https://www.youtube.com", "referer": "https://www.youtube.com/tv",
+                    "cookie": CONSENT_COOKIE},
+        "context": {"client": {"clientName": "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+                               "clientVersion": "2.0", "clientScreen": "EMBED",
+                               "hl": "en", "gl": "US"},
+                    "thirdParty": {"embedUrl": "https://www.youtube.com/tv"}},
+        "consent": True,
+    },
 )
 
 
-def _captions_from_player(player: dict) -> list[dict]:
-    tracks = (((player.get("captions") or {})
+def player_request(client: dict) -> tuple[str, dict]:
+    """(url, headers) for the player call — identity headers must match the body."""
+    version = (client["context"]["client"] or {}).get("clientVersion", "")
+    headers = {
+        **client["headers"],
+        "x-youtube-client-name": str(client["client_name_id"]),
+        "x-youtube-client-version": str(version),
+    }
+    url = f"https://www.youtube.com/youtubei/v1/player?key={INNERTUBE_KEY}&prettyPrint=false"
+    return url, headers
+
+
+def with_caption_format(base_url: str, fmt: str) -> str:
+    """Swap only `fmt` on a signed caption URL — the rest of the signature is opaque."""
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+    parts = urlsplit(base_url)
+    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "fmt"]
+    query.append(("fmt", fmt))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+
+def read_player_response(payload: dict) -> dict:
+    status = (payload.get("playabilityStatus") or {})
+    details = payload.get("videoDetails") or {}
+    tracks = (((payload.get("captions") or {})
                .get("playerCaptionsTracklistRenderer") or {})
               .get("captionTracks") or [])
-    return tracks
+    keep = [t for t in tracks if t.get("baseUrl") and t.get("languageCode")]
+    return {"status": status.get("status") or "?", "reason": status.get("reason") or "",
+            "tracks": keep, "title": details.get("title") or "",
+            "channel": details.get("author") or ""}
 
 
-def _fetch_track(track: dict) -> list[tuple[float, str]]:
-    base = track.get("baseUrl") or ""
-    if not base:
-        return []
-    for suffix in ("&fmt=json3", ""):
-        try:
-            raw = _get(base + suffix, timeout=25)
-        except IngestError:
+def parse_srv3(xml: str) -> list[tuple[float, str]]:
+    """`<p t="12340" d="2000"><s>Hello</s><s> world</s></p>` — t is milliseconds."""
+    out: list[tuple[float, str]] = []
+    for attrs, inner in re.findall(r"<p\s([^>]*)>([\s\S]*?)</p>", xml):
+        found = re.search(r'\bt="(\d+)"', attrs)
+        if not found:
             continue
-        lines = parse_json3(raw) if "json3" in suffix else []
-        if not lines:
-            lines = parse_timedtext_xml(raw) or parse_vtt(raw.decode("utf-8", "replace"))
+        words = re.findall(r"<s[^>]*>([\s\S]*?)</s>", inner)
+        body = _clean("".join(words) if words else inner)
+        if body:
+            out.append((int(found.group(1)) / 1000.0, body))
+    return out
+
+
+def caption_lines(raw: bytes, fmt: str) -> list[tuple[float, str]]:
+    text = raw.decode("utf-8", "replace")
+    if fmt == "json3":
+        return parse_json3(raw)
+    if fmt == "srv3":
+        return parse_srv3(text)
+    if fmt == "vtt":
+        return parse_vtt(text)
+    return parse_timedtext_xml(raw) or parse_srv3(text) or parse_vtt(text)
+
+
+def fetch_track_lines(client: dict, base_url: str) -> tuple[list[tuple[float, str]], str]:
+    """Try the signed URL in the three shapes YouTube serves it in."""
+    failures: list[str] = []
+    for fmt in ("json3", "srv3", "vtt"):
+        try:
+            raw = _get(with_caption_format(base_url, fmt), timeout=25,
+                       headers={"User-Agent": client["headers"]["user-agent"],
+                                "Accept-Language": "en-US,en;q=0.9",
+                                **({"Cookie": CONSENT_COOKIE} if client.get("consent") else {})})
+        except IngestError as exc:
+            failures.append(f"{fmt}: {exc}")
+            continue
+        lines = caption_lines(raw, fmt)
         if lines:
-            return lines
-    return []
+            return lines, fmt
+        failures.append(f"{fmt}: empty")
+    raise IngestError("The caption track returned nothing.", "; ".join(failures)[:240])
 
 
 def _via_innertube(vid: str, language: str) -> Transcript:
     reasons: list[str] = []
     for client in INNERTUBE_CLIENTS:
+        name = f"innertube:{client['id']}"
+        url, headers = player_request(client)
         try:
-            player = _post_json(
-                f"https://www.youtube.com/youtubei/v1/player?key={INNERTUBE_KEY}"
-                "&prettyPrint=false",
-                {"context": {"client": client}, "videoId": vid,
-                 "contentCheckOk": True, "racyCheckOk": True},
-            )
+            player = _post_json(url, {"context": client["context"], "videoId": vid,
+                                      "contentCheckOk": True, "racyCheckOk": True},
+                                headers=headers)
         except IngestError as exc:
-            reasons.append(f"{client['clientName']}: {exc}")
+            reasons.append(f"{name}: {exc}")
             continue
-        status = player.get("playabilityStatus") or {}
-        tracks = _captions_from_player(player)
-        if not tracks:
-            reasons.append(
-                f"{client['clientName']}: no tracks ({status.get('status', '?')}"
-                f"{', ' + status['reason'] if status.get('reason') else ''})")
+
+        info = read_player_response(player)
+        if info["status"] not in ("OK", "LIVE_STREAM_OFFLINE"):
+            reasons.append(f"{name}: {info['status']}"
+                           f"{' — ' + info['reason'] if info['reason'] else ''}")
             continue
-        track = _pick_track(tracks, language)
+        track = _pick_track(info["tracks"], language)
         if not track:
-            reasons.append(f"{client['clientName']}: no {language} track")
+            reasons.append(f"{name}: OK but 0 caption tracks")
             continue
-        lines = _fetch_track(track)
-        if not lines:
-            reasons.append(f"{client['clientName']}: track returned nothing")
+        try:
+            lines, fmt = fetch_track_lines(client, track["baseUrl"])
+        except IngestError as exc:
+            reasons.append(f"{name}: {exc}")
             continue
         merged = consolidate(lines)
-        meta = player.get("videoDetails") or {}
         return Transcript(
-            text=to_text(merged), lines=merged, source="innertube",
-            language=track.get("languageCode") or "", is_auto=track.get("kind") == "asr",
-            video_id=vid, title=meta.get("title") or "", channel=meta.get("author") or "",
+            text=to_text(merged), lines=merged,
+            source=f"innertube:{client['id']}",
+            language=track.get("languageCode") or "",
+            is_auto=track.get("kind") == "asr", video_id=vid,
+            title=info["title"], channel=info["channel"],
         )
-    raise IngestError("No caption track through YouTube's player API.",
-                      "; ".join(reasons)[:300])
+    raise IngestError("No client identity returned captions for this video.",
+                      "; ".join(reasons)[:400])
+
+
+# --------------------------------------------------------------------------
+# strategy 2: watch page (player response embedded in the HTML)
+# --------------------------------------------------------------------------
+def _via_watch_page(vid: str, language: str) -> Transcript:
+    html = _get(
+        f"https://www.youtube.com/watch?v={vid}&bpctr=9999999999&has_verified=1&hl=en",
+        timeout=25, headers={"User-Agent": CHROME_UA,
+                             "Accept-Language": "en-US,en;q=0.9",
+                             "Cookie": CONSENT_COOKIE},
+    ).decode("utf-8", "replace")
+
+    m = re.search(r"ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;", html, flags=re.S)
+    if not m:
+        m = re.search(r'"captionTracks":(\[.*?\])', html)
+        if not m:
+            raise IngestError(
+                "The watch page served no player response.",
+                "YouTube showed a consent or bot page instead. Export cookies.txt from "
+                "a browser and put it in the repo root, or paste the transcript.",
+            )
+        tracks = json.loads(m.group(1))
+        title = channel = ""
+    else:
+        try:
+            info = read_player_response(json.loads(m.group(1)))
+        except ValueError as exc:
+            raise IngestError("Could not read the page's player data.", str(exc)) from exc
+        tracks, title, channel = info["tracks"], info["title"], info["channel"]
+
+    track = _pick_track(tracks, language)
+    if not track:
+        raise IngestError("No usable caption track on this video.",
+                          "Paste the transcript manually.")
+    lines, _fmt = fetch_track_lines(INNERTUBE_CLIENTS[1], track["baseUrl"])
+    merged = consolidate(lines)
+    return Transcript(text=to_text(merged), lines=merged, source="watch-page",
+                      language=track.get("languageCode") or "",
+                      is_auto=track.get("kind") == "asr", video_id=vid,
+                      title=title, channel=channel)
 
 
 # --------------------------------------------------------------------------
@@ -442,24 +561,37 @@ def _via_ytdlp(vid: str, language: str) -> Transcript:
 
 
 # --------------------------------------------------------------------------
-# strategy 2c: the old timedtext endpoint (no signing, sometimes still open)
+# strategy 3: unsigned timedtext (no player round-trip at all)
 # --------------------------------------------------------------------------
 def _via_timedtext(vid: str, language: str) -> Transcript:
-    for host in ("https://www.youtube.com/api/timedtext",
-                 "https://video.google.com/timedtext"):
-        for lang in (language, "en"):
+    """Manual tracks are often served unsigned; it costs one request to find out."""
+    candidates: list[str] = []
+    for lang in (language, (language or "").split("-")[0], "en"):
+        if lang and lang not in candidates:
+            candidates.append(lang)
+    failures: list[str] = []
+    for lang in candidates:
+        for asr in (False, True):
+            url = (f"https://www.youtube.com/api/timedtext?v={vid}&lang={lang}"
+                   f"&fmt=json3" + ("&kind=asr" if asr else ""))
             try:
-                raw = _get(f"{host}?lang={lang}&v={vid}", timeout=20)
-            except IngestError:
+                raw = _get(url, timeout=20,
+                           headers={"User-Agent": CHROME_UA,
+                                    "Accept-Language": "en-US,en;q=0.9",
+                                    "Cookie": CONSENT_COOKIE})
+            except IngestError as exc:
+                failures.append(f"{lang}{'(asr)' if asr else ''}: {exc}")
                 continue
-            lines = parse_timedtext_xml(raw)
-            if lines:
-                merged = consolidate(lines)
-                return Transcript(text=to_text(merged), lines=merged,
-                                  source="timedtext", language=lang,
-                                  is_auto=True, video_id=vid)
-    raise IngestError("The timedtext endpoint returned no cues.",
-                      "Paste the transcript manually.")
+            lines = parse_json3(raw) or parse_timedtext_xml(raw)
+            if not lines:
+                failures.append(f"{lang}{'(asr)' if asr else ''}: empty")
+                continue
+            merged = consolidate(lines)
+            return Transcript(text=to_text(merged), lines=merged,
+                              source="timedtext-unsigned", language=lang,
+                              is_auto=asr, video_id=vid)
+    raise IngestError("The unsigned timedtext endpoint served nothing.",
+                      "; ".join(failures)[:240])
 
 
 # --------------------------------------------------------------------------
@@ -513,8 +645,8 @@ def fetch_transcript(url_or_id: str, *, language: str = "en", use_cache: bool = 
             pass
 
     errors: list[str] = []
-    for strategy in (_via_innertube, _via_watch_page, _via_ytdlp,
-                     _via_timedtext, _via_transcript_api):
+    for strategy in (_via_innertube, _via_timedtext, _via_watch_page,
+                     _via_ytdlp, _via_transcript_api):
         try:
             tr = strategy(vid, language)
         except IngestError as exc:
