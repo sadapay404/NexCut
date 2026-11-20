@@ -154,7 +154,16 @@ if (visibleTransitions > 20) {
   add("WARN", "perf", `${visibleTransitions} transitions declared`, "check the slow ones on low-end phones");
 }
 
-/* ── 9. the specific things that broke on a real laptop ───────────────── */
+/* ── 9. the browser must not serve last week's CSS ───────────────────── */
+const busters = [...html.matchAll(/\?v=(\d+)/g)].map((m) => m[1]);
+if (busters.length < 2) {
+  add("FAIL", "cache", "no ?v= cache-buster on the assets", "a fix ships and nobody sees it");
+} else if (new Set(busters).size > 1) {
+  add("FAIL", "cache", `cache-busters disagree (${busters.join(", ")})`,
+      "CSS and JS must be versioned together");
+}
+
+/* ── 10. the specific things that broke on a real laptop ──────────────── */
 if (!/inputmode="url"/.test(urlInput)) {
   add("FAIL", "mobile", "#ytUrl has no inputmode=url", "phones open a full keyboard for a URL field");
 }
