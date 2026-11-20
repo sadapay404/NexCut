@@ -34,19 +34,61 @@ class ReadEnvTests(unittest.TestCase):
         self.assertEqual(check_key.read_env(pathlib.Path("/nope/.env")), {})
 
     def test_no_key_exits_two(self):
+        import os
+        from unittest import mock
         with tempfile.TemporaryDirectory() as tmp:
             empty = pathlib.Path(tmp) / ".env"
             empty.write_text("NEXCUT_PROVIDER=gemini\n", encoding="utf-8")
             original = check_key.ROOT
             check_key.ROOT = pathlib.Path(tmp)
             try:
-                code = check_key.main(["check_key.py"])
+                # load_env() writes into os.environ; patch.dict rolls it back
+                with mock.patch.dict(os.environ, {}, clear=False):
+                    code = check_key.main(["check_key.py"])
             finally:
                 check_key.ROOT = original
         self.assertEqual(code, 2)
 
 
 class ListModelsTests(unittest.TestCase):
+    def test_lists_openai_style_ids_for_groq(self):
+        import io as _io
+        import json as _json
+        import contextlib
+        from unittest import mock
+
+        payload = {"data": [{"id": "llama-3.3-70b-versatile"}, {"id": "openai/gpt-oss-120b"}]}
+
+        class R:
+            def read(self):
+                return _json.dumps(payload).encode()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        seen = {}
+
+        def fake_get(url, headers):
+            seen["url"] = url
+            seen["headers"] = headers
+            return payload
+
+        buffer = _io.StringIO()
+        import os
+        with mock.patch.dict(os.environ, {"NEXCUT_PROVIDER": "groq"}), \
+             mock.patch.object(check_key, "_get", fake_get), \
+             contextlib.redirect_stdout(buffer):
+            code = check_key.list_models("gsk_key")
+        out = buffer.getvalue()
+        self.assertEqual(code, 0)
+        self.assertEqual(seen["url"], "https://api.groq.com/openai/v1/models")
+        self.assertEqual(seen["headers"]["Authorization"], "Bearer gsk_key")
+        self.assertIn("llama-3.3-70b-versatile", out)
+        self.assertIn("NEXCUT_MODELS=", out)
+
     def test_lists_only_generate_content_ids(self):
         import io as _io
         import json as _json
@@ -87,17 +129,11 @@ class EnvDrivesResolution(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             env = check_key.read_env(pathlib.Path(tmp) / "missing.env")
             env.update({"NEXCUT_PROVIDER": "gemini"})
-            original = {k: os.environ.get(k) for k in ("NEXCUT_PROVIDER", "NEXCUT_MODELS")}
-            os.environ.pop("NEXCUT_MODELS", None)
-            try:
+            from unittest import mock
+            with mock.patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("NEXCUT_MODELS", None)
                 check_key.load_env(env)
                 self.assertTrue(check_key.shipped_default_model().startswith("gemini-"))
-            finally:
-                for k, v in original.items():
-                    if v is None:
-                        os.environ.pop(k, None)
-                    else:
-                        os.environ[k] = v
 
 
 if __name__ == "__main__":

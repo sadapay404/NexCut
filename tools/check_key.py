@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Ask Google directly whether the key in .env works — none of app code in the path.
+"""Ask the provider directly whether the key in .env works — app code not in the path.
 
-    python3 tools/check_key.py                 # uses .env + gemini-2.5-flash
-    python3 tools/check_key.py gemini-2.0-flash # another model id
+    python3 tools/check_key.py --list          # every model id this key may call
+    python3 tools/check_key.py                 # one tiny call, default model
+    python3 tools/check_key.py <model-id>      # one tiny call, that model
 
-Prints the HTTP status and the response body, so a failure is Google's own words.
+Understands the providers the app understands:
+  NEXCUT_PROVIDER=gemini            -> generativelanguage.googleapis.com
+  NEXCUT_PROVIDER=groq | openai     -> {NEXCUT_OPENAI_BASE:-provider}/chat/completions
 """
 
 from __future__ import annotations
@@ -18,14 +21,21 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+GEMINI_LIST = "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200"
+GROQ_BASE = "https://api.groq.com/openai/v1"
+OPENAI_BASE = "https://api.openai.com/v1"
+
+SUGGESTION = re.compile(r"use (?:the )?models?/([A-Za-z0-9._\-]+)")
 
 
-def read_env(path: Path = ROOT / ".env") -> dict[str, str]:
+# ── .env ──────────────────────────────────────────────────────────────
+def read_env(path: Path | None = None) -> dict[str, str]:
+    path = path or (ROOT / ".env")
     values: dict[str, str] = {}
-    if not path.is_file():
+    if not Path(path).is_file():
         return values
-    for raw in path.read_text(encoding="utf-8").splitlines():
+    for raw in Path(path).read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -40,6 +50,20 @@ def load_env(env: dict[str, str]) -> None:
         os.environ.setdefault(name, value)
 
 
+def provider() -> str:
+    return (os.environ.get("NEXCUT_PROVIDER") or "gemini").strip().lower()
+
+
+def base_url() -> str:
+    if provider() == "groq":
+        default = GROQ_BASE
+    elif provider() == "openai":
+        default = OPENAI_BASE
+    else:
+        default = ""
+    return (os.environ.get("NEXCUT_OPENAI_BASE") or default).rstrip("/")
+
+
 def shipped_default_model() -> str:
     """Stay in step with the app instead of repeating a model id here."""
     sys.path.insert(0, str(ROOT))
@@ -47,37 +71,65 @@ def shipped_default_model() -> str:
         from nexcut.providers import default_model  # noqa: PLC0415
         return default_model()
     except Exception:  # noqa: BLE001 - the tool must run standalone
-        return "gemini-3.8-flash"
+        from nexcut.providers import GEMINI_MODELS  # noqa: PLC0415
+        return GEMINI_MODELS[0]
+
+
+def configured_model() -> str:
+    for name in ("NEXCUT_MODELS", "NEXCUT_MODEL"):
+        value = (os.environ.get(name, "") or "").split(",")[0].strip()
+        if value:
+            return value
+    return shipped_default_model()
+
+
+# ── http ──────────────────────────────────────────────────────────────
+def _get(url: str, headers: dict[str, str]) -> dict:
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read().decode() or "{}")
+
+
+def _post(url: str, body: dict, headers: dict) -> dict:
+    req = urllib.request.Request(
+        url, data=json.dumps(body).encode(), method="POST",
+        headers={"Content-Type": "application/json", **headers},
+    )
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read().decode() or "{}")
 
 
 def list_models(key: str) -> int:
-    """Print every id this key can call generateContent on."""
-    url = "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200"
-    req = urllib.request.Request(url, headers={"x-goog-api-key": key})
+    """Print every id this key can actually call."""
+    kind = provider()
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            payload = json.loads(r.read().decode() or "{}")
+        if kind in ("groq", "openai"):
+            base = base_url()
+            payload = _get(f"{base}/models", {"Authorization": f"Bearer {key}"})
+            ids = sorted({m.get("id", "") for m in payload.get("data", []) if m.get("id")},
+                         reverse=True)
+            print(f"{len(ids)} model(s) at {base}:")
+        else:
+            payload = _get(GEMINI_LIST, {"x-goog-api-key": key})
+            ids = sorted(
+                {m["name"].split("/")[-1] for m in payload.get("models", [])
+                 if "generateContent" in (m.get("supportedGenerationMethods") or [])},
+                reverse=True,
+            )
+            print(f"{len(ids)} model(s) this key may call:")
     except urllib.error.HTTPError as exc:
         print(f"HTTP {exc.code}\n{exc.read().decode()[:600]}")
         return 1
     except urllib.error.URLError as exc:
-        print(f"Could not reach Google: {exc.reason}")
+        print(f"Could not reach the provider: {exc.reason}")
         return 1
-    usable = []
-    for model in payload.get("models", []):
-        methods = model.get("supportedGenerationMethods") or []
-        if "generateContent" in methods:
-            usable.append(model["name"].split("/")[-1])
-    usable.sort(reverse=True)
-    print(f"{len(usable)} model(s) this key may call:\n")
-    for name in usable:
+
+    for name in ids:
         print(f"  {name}")
-    print("\nUse one of them:")
-    print(f"  echo 'NEXCUT_MODELS={','.join(usable[:3])}' >> .env")
+    if ids:
+        print("\nUse one (or three) of them:")
+        print(f"  echo 'NEXCUT_MODELS={','.join(ids[:3])}' >> .env")
     return 0
-
-
-SUGGESTION = re.compile(r"use (?:the )?models?/([A-Za-z0-9._\-]+)")
 
 
 def check_key_suggestion(body: str) -> str:
@@ -85,62 +137,73 @@ def check_key_suggestion(body: str) -> str:
     return found.group(1) if found else ""
 
 
+# ── main ──────────────────────────────────────────────────────────────
 def main(argv: list[str]) -> int:
     env = read_env()
     load_env(env)
     key = (env.get("NEXCUT_API_KEY") or os.environ.get("NEXCUT_API_KEY", "")).strip()
-    if len(argv) > 1:
-        model = argv[1]
-    else:
-        for name in ("NEXCUT_MODELS", "NEXCUT_MODEL"):
-            value = (env.get(name) or os.environ.get(name, "")).split(",")[0].strip()
-            if value:
-                model = value
-                break
-        else:
-            model = shipped_default_model()
+    model = argv[1] if len(argv) > 1 else configured_model()
 
     if not key:
         print("No NEXCUT_API_KEY in .env or the environment.")
         return 2
-    print(f"key  {key[:6]}…{key[-4:]}  ({len(key)} chars)")
-    print(f"model {model}")
-
     if model in ("--list", "-l", "list"):
         return list_models(key)
 
-    body = json.dumps({
-        "contents": [{"role": "user", "parts": [{"text": "Reply with the single word READY."}]}],
-        "generationConfig": {"maxOutputTokens": 16, "temperature": 0},
-    }).encode()
-    req = urllib.request.Request(
-        ENDPOINT.format(model=model), data=body, method="POST",
-        headers={"Content-Type": "application/json", "x-goog-api-key": key},
-    )
+    kind = provider()
+    print(f"key  {key[:6]}…{key[-4:]}  ({len(key)} chars)")
+    print(f"provider {kind}")
+    print(f"model {model}")
+
+    if kind in ("groq", "openai"):
+        base = base_url()
+        url = f"{base}/chat/completions"
+        headers = {"Authorization": f"Bearer {key}"}
+        body = {
+            "model": model,
+            "messages": [{"role": "user", "content": "Reply with the single word READY."}],
+            "temperature": 0,
+            "max_tokens": 16,
+        }
+
+        def extract(payload: dict) -> str:
+            return (payload["choices"][0]["message"]["content"] or "").strip()
+    else:
+        url = GEMINI_ENDPOINT.format(model=model)
+        headers = {"x-goog-api-key": key}
+        body = {
+            "contents": [{"role": "user", "parts": [{"text": "Reply with the single word READY."}]}],
+            "generationConfig": {"maxOutputTokens": 16, "temperature": 0},
+        }
+
+        def extract(payload: dict) -> str:
+            return "".join(p.get("text", "") for p in
+                           payload["candidates"][0]["content"]["parts"]).strip()
+
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            payload = json.loads(r.read().decode() or "{}")
-            text = "".join(
-                p.get("text", "") for p in
-                payload["candidates"][0]["content"]["parts"]
-            ).strip()
-            print(f"\nHTTP {r.status}  OK")
-            print(f"reply: {text or '(empty)'}")
-            return 0
+        payload = _post(url, body, headers)
+        print("\nHTTP 200  OK")
+        print(f"reply: {extract(payload) or '(empty)'}")
+        return 0
     except urllib.error.HTTPError as exc:
-        body_text = exc.read().decode()
+        detail = exc.read().decode()
         print(f"\nHTTP {exc.code}  FAILED")
-        print(body_text[:800])
-        suggestion = check_key_suggestion(body_text)
+        print(detail[:800])
+        suggestion = check_key_suggestion(detail)
         if suggestion and suggestion != model:
-            print(f"\nGoogle names a replacement — try:")
+            print("\nGoogle names a replacement — try:")
             print(f"  python3 tools/check_key.py {suggestion}")
         if exc.code in (401, 403):
-            print("\nThe key itself was refused: re-copy it from AI Studio, or enable "
-                  "the Generative Language API for its project.")
+            print("\nThe key itself was refused: re-copy it, check it is enabled for "
+                  "this provider, and restart the server after editing .env.")
+        if exc.code == 404 and kind in ("groq", "openai"):
+            print("\nNo such model here — list them: python3 tools/check_key.py --list")
         return 1
     except urllib.error.URLError as exc:
-        print(f"\nCould not reach Google: {exc.reason}")
+        print(f"\nCould not reach the provider: {exc.reason}")
+        return 1
+    except TimeoutError:
+        print("\nThe provider did not answer within 60s.")
         return 1
 
 

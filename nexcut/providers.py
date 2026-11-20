@@ -40,11 +40,32 @@ GEMINI_MODELS = [
 ]
 OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"]
 
+# Groq speaks the OpenAI wire format; ids drift, so `check_key.py --list` is truth.
+GROQ_BASE = "https://api.groq.com/openai/v1"
+GROQ_MODELS = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "openai/gpt-oss-120b",
+]
+
 TIMEOUT_MSG = "Gemini is slow right now — the request timed out before it answered."
 
 
 def provider_kind() -> str:
+    kind = (os.environ.get("NEXCUT_PROVIDER") or "stub").strip().lower()
+    return "openai" if kind in ("groq",) else kind
+
+
+def provider_label() -> str:
+    """What the user called it — 'groq' stays groq in messages and logs."""
     return (os.environ.get("NEXCUT_PROVIDER") or "stub").strip().lower()
+
+
+def request_timeout() -> int:
+    try:
+        return max(10, int(os.environ.get("NEXCUT_TIMEOUT", "180")))
+    except ValueError:
+        return 180
 
 
 DEFAULT_GEMINI_MODEL = GEMINI_MODELS[0]
@@ -79,7 +100,7 @@ def model_catalog() -> list[dict[str, str]]:
     if raw:
         ids = [m.strip() for m in raw.split(",") if m.strip()]
     elif provider_kind() == "openai":
-        ids = list(OPENAI_MODELS)
+        ids = list(GROQ_MODELS if provider_label() == "groq" else OPENAI_MODELS)
     elif provider_kind() == "gemini":
         ids = list(GEMINI_MODELS)
     else:
@@ -110,10 +131,10 @@ class _HttpProvider:
 
     name = "http"
 
-    def __init__(self, api_key: str, *, backup_key: str = "", timeout: int = 180) -> None:
+    def __init__(self, api_key: str, *, backup_key: str = "", timeout: int | None = None) -> None:
         self.api_key = (api_key or "").strip()
         self.backup_key = (backup_key or os.environ.get("NEXCUT_BACKUP_KEY", "")).strip()
-        self.timeout = timeout
+        self.timeout = timeout or request_timeout()
 
     # subclass hook -----------------------------------------------------
     def _attempt(self, model: str, system: str, user: str, key: str) -> str:
@@ -132,8 +153,14 @@ class _HttpProvider:
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode()[:400]
             if exc.code in (429, 500, 502, 503, 504):
+                hint = ""
+                if exc.code == 429:
+                    hint = ("Rate limit. Free tiers cap tokens per minute, and a long "
+                            "transcript is a big request — retry shortly, or use a "
+                            "shorter video / higher tier.")
                 raise ProviderError(
-                    f"{label} was unavailable (HTTP {exc.code}).", retryable=True
+                    f"{label} was unavailable (HTTP {exc.code}).",
+                    retryable=True, hint=hint,
                 ) from exc
             if exc.code in (401, 403):
                 raise ProviderError(
@@ -232,7 +259,12 @@ class OpenAIProvider(_HttpProvider):
 
     def __init__(self, api_key: str, **kw) -> None:
         super().__init__(api_key, **kw)
-        self.base = (os.environ.get("NEXCUT_OPENAI_BASE") or "https://api.openai.com/v1").rstrip("/")
+        default_base = GROQ_BASE if provider_label() == "groq" else "https://api.openai.com/v1"
+        self.base = (os.environ.get("NEXCUT_OPENAI_BASE") or default_base).rstrip("/")
+
+    @property
+    def name(self) -> str:  # "groq" in logs when that's what was configured
+        return provider_label() if provider_label() in ("groq", "openai") else "openai"
 
     def _attempt(self, model: str, system: str, user: str, key: str) -> str:
         body = {

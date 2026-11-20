@@ -139,6 +139,8 @@ def key_status() -> tuple[int, dict]:
         provider = make_provider("")
     except Exception as exc:  # noqa: BLE001
         return 502, {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+    if hasattr(provider, "timeout"):
+        provider.timeout = min(getattr(provider, "timeout", 30) or 30, 30)
     if getattr(provider, "name", "") == "stub":
         return 200, {"ok": True, "provider": "stub", "model": "offline-demo", "ms": 0,
                      "reply": "demo provider — no key is in use"}
