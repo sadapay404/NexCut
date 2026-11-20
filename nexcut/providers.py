@@ -66,9 +66,11 @@ def resolve_model(alias: str) -> str:
 class ProviderError(ExtractError):
     """Non-retryable unless `retryable` is set (then the cascade moves on)."""
 
-    def __init__(self, message: str, *, retryable: bool = False) -> None:
+    def __init__(self, message: str, *, retryable: bool = False,
+                 hint: str = "") -> None:
         super().__init__(message)
         self.retryable = retryable
+        self.hint = hint
 
 
 class _HttpProvider:
@@ -118,7 +120,11 @@ class _HttpProvider:
             order += [m["id"] for m in model_catalog() if m["id"] != model]
         keys = [self.api_key] + ([self.backup_key] if self.backup_key else [])
         if not keys[0] and not self.backup_key:
-            raise ProviderError("No API key provided. Paste one in the Engine panel.")
+            raise ProviderError(
+                "No API key. Put NEXCUT_API_KEY=... in .env next to the repo root, "
+                "or export it before starting the server.",
+                hint="NEXCUT_API_KEY was empty when the server started — .env is only "
+                     "read at startup, so restart after editing it.")
 
         last: ProviderError | None = None
         for key in keys:
