@@ -131,10 +131,10 @@ def _default_model() -> str:
 
 def key_status() -> tuple[int, dict]:
     """One tiny model call: proves the key in .env works before a real run."""
-    from .providers import ProviderError, make_provider  # noqa: PLC0415
+    from .providers import (  # noqa: PLC0415
+        ProviderError, health_candidates, make_provider,
+    )
 
-    # same model the runs will use: NEXCUT_MODEL, else NEXCUT_MODELS, else catalog
-    model = _default_model()
     try:
         provider = make_provider("")
     except Exception as exc:  # noqa: BLE001
@@ -142,30 +142,43 @@ def key_status() -> tuple[int, dict]:
     if getattr(provider, "name", "") == "stub":
         return 200, {"ok": True, "provider": "stub", "model": "offline-demo", "ms": 0,
                      "reply": "demo provider — no key is in use"}
+    tried: list[str] = []
     started = time.monotonic()
-    try:
-        text, used = provider.complete(
-            system="You are a health check. Answer with one word only.",
-            user="Reply with the single word READY.",
-            model=model,
-            cascade=False,
-        )
-    except ProviderError as exc:
-        hint = getattr(exc, "hint", "") or ""
-        if not hint and "rejected" in str(exc).lower():
-            hint = ("Copy the whole key from AI Studio, then restart the server "
-                    "so .env is read again.")
-        return 502, {"ok": False, "detail": str(exc), "hint": hint}
-    except Exception as exc:  # noqa: BLE001 - report, never 500 the check
-        where = ""
-        tb = traceback.extract_tb(exc.__traceback__)
-        if tb:
-            last = tb[-1]
-            where = f" [{'/'.join(Path(last.filename).parts[-2:])}:{last.lineno}]"
-        return 502, {"ok": False, "detail": f"{type(exc).__name__}: {exc}{where}"}
-    return 200, {"ok": True, "provider": getattr(provider, "name", "?"), "model": used,
-                 "ms": int((time.monotonic() - started) * 1000),
-                 "reply": (text or "").strip()[:60]}
+    for candidate in health_candidates():
+        try:
+            text, used = provider.complete(
+                system="You are a health check. Answer with one word only.",
+                user="Reply with the single word READY.",
+                model=candidate,
+                cascade=False,
+            )
+        except ProviderError as exc:
+            tried.append(f"{candidate}: {exc}")
+            continue
+        except Exception as exc:  # noqa: BLE001 - report, never 500 the check
+            where = ""
+            tb = traceback.extract_tb(exc.__traceback__)
+            if tb:
+                last = tb[-1]
+                where = f" [{'/'.join(Path(last.filename).parts[-2:])}:{last.lineno}]"
+            return 502, {"ok": False, "detail": f"{type(exc).__name__}: {exc}{where}"}
+        else:
+            return 200, {"ok": True, "provider": getattr(provider, "name", "?"),
+                         "model": used,
+                         "ms": int((time.monotonic() - started) * 1000),
+                         "reply": (text or "").strip()[:60],
+                         "skipped": tried}
+    hint = ""
+    if any("rejected" in t for t in tried):
+        hint = ("The key was refused: re-copy it from AI Studio, confirm the "
+                "Generative Language API is enabled, then restart the server.")
+    elif any("404" in t or "not found" in t for t in tried):
+        hint = ("Google no longer serves these ids to this key. List what it does: "
+                "python3 tools/check_key.py --list")
+    elif any("503" in t or "unavailable" in t for t in tried):
+        hint = "Google is overloaded for these ids — try again in a minute, or pick another id."
+    return 502, {"ok": False, "detail": "No model answered. " + " | ".join(tried),
+                 "hint": hint, "tried": tried}
 
 
 class Handler(BaseHTTPRequestHandler):

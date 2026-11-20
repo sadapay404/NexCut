@@ -60,6 +60,9 @@ class KeyCheckRouteTests(unittest.TestCase):
         self.assertTrue(body["ok"])
         self.assertEqual(body["provider"], "stub")
 
+    GEMINI_ENV = {"NEXCUT_PROVIDER": "gemini", "NEXCUT_MODELS": "gemini-3.8-flash",
+                  "NEXCUT_MODEL": ""}
+
     def test_ok_path_reports_model_and_latency(self):
         class Fake:
             name = "gemini"
@@ -69,7 +72,8 @@ class KeyCheckRouteTests(unittest.TestCase):
                 return "READY", "gemini-2.5-flash"
 
         fake = Fake()
-        with mock.patch("nexcut.providers.make_provider", return_value=fake):
+        with mock.patch.dict(os.environ, self.GEMINI_ENV), \
+             mock.patch("nexcut.providers.make_provider", return_value=fake):
             code, body = server.key_status()
         self.assertEqual(code, 200)
         self.assertEqual(body["model"], "gemini-2.5-flash")
@@ -84,12 +88,30 @@ class KeyCheckRouteTests(unittest.TestCase):
             def complete(self, **kw):
                 raise providers.ProviderError("That API key was rejected.")
 
-        with mock.patch("nexcut.providers.make_provider", return_value=Fake()):
+        with mock.patch.dict(os.environ, self.GEMINI_ENV), \
+             mock.patch("nexcut.providers.make_provider", return_value=Fake()):
             code, body = server.key_status()
         self.assertEqual(code, 502)
         self.assertFalse(body["ok"])
         self.assertIn("rejected", body["detail"])
         self.assertIn("restart the server", body["hint"])
+
+    def test_every_candidate_is_reported_when_all_fail(self):
+        class Fake:
+            name = "gemini"
+
+            def complete(self, **kw):
+                raise providers.ProviderError(f"{kw['model']} was unavailable (HTTP 503).")
+
+        env = {"NEXCUT_PROVIDER": "gemini", "NEXCUT_MODELS": "a-model,b-model",
+               "NEXCUT_MODEL": ""}
+        with mock.patch.dict(os.environ, env), \
+             mock.patch("nexcut.providers.make_provider", return_value=Fake()):
+            code, body = server.key_status()
+        self.assertEqual(code, 502)
+        self.assertIn("a-model", body["detail"])
+        self.assertIn("b-model", body["detail"])
+        self.assertIn("overloaded", body["hint"])
 
     def test_models_env_decides_which_model_is_tested(self):
         seen = {}
@@ -101,7 +123,8 @@ class KeyCheckRouteTests(unittest.TestCase):
                 seen.update(kw)
                 return "READY", kw["model"]
 
-        env = {"NEXCUT_MODELS": "gemini-2.5-pro,gemini-2.5-flash", "NEXCUT_MODEL": ""}
+        env = {"NEXCUT_PROVIDER": "gemini",
+               "NEXCUT_MODELS": "gemini-2.5-pro,gemini-2.5-flash", "NEXCUT_MODEL": ""}
         with mock.patch.dict(os.environ, env), \
              mock.patch("nexcut.providers.make_provider", return_value=Fake()):
             code, body = server.key_status()

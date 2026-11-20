@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import os
 import unittest
 import urllib.error
 from unittest import mock
@@ -69,7 +70,10 @@ class HealthCheckReportsRealErrors(unittest.TestCase):
                 raise providers.ProviderError("gemini-2.5-flash was unavailable (HTTP 503).",
                                               retryable=True)
 
-        with mock.patch("nexcut.providers.make_provider", return_value=Fake()):
+        env = {"NEXCUT_PROVIDER": "gemini", "NEXCUT_MODELS": "gemini-3.8-flash",
+               "NEXCUT_MODEL": ""}
+        with mock.patch.dict(os.environ, env), \
+             mock.patch("nexcut.providers.make_provider", return_value=Fake()):
             code, body = server.key_status()
         self.assertEqual(code, 502)
         self.assertIn("503", body["detail"])

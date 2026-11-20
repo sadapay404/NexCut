@@ -66,6 +66,13 @@ def default_model() -> str:
     return model_catalog()[0]["id"]
 
 
+def health_candidates(limit: int = 3) -> list[str]:
+    """Models worth trying for a key check: the default, then the catalogue."""
+    first = default_model()
+    rest = [m["id"] for m in model_catalog() if m["id"] != first]
+    return [m for m in ([first] + rest) if m != "offline-demo"][:limit]
+
+
 def model_catalog() -> list[dict[str, str]]:
     raw = os.environ.get("NEXCUT_MODELS")
     if raw:
@@ -165,6 +172,8 @@ class _HttpProvider:
                     last = exc
                     if not exc.retryable:
                         raise
+        if len(order) == 1 and last is not None:
+            raise last
         raise ProviderError(
             "Every model in the fallback chain failed. " + (str(last) if last else "")
         )

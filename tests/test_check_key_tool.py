@@ -46,5 +46,59 @@ class ReadEnvTests(unittest.TestCase):
         self.assertEqual(code, 2)
 
 
+class ListModelsTests(unittest.TestCase):
+    def test_lists_only_generate_content_ids(self):
+        import io as _io
+        import json as _json
+
+        payload = {"models": [
+            {"name": "models/gemini-3.8-flash", "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/embedding-001", "supportedGenerationMethods": ["embedContent"]},
+            {"name": "models/gemini-2.5-pro", "supportedGenerationMethods": ["generateContent"]},
+        ]}
+
+        class R:
+            def read(self):
+                return _json.dumps(payload).encode()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        from unittest import mock
+        import contextlib
+        buffer = _io.StringIO()
+        with mock.patch("urllib.request.urlopen", return_value=R()), \
+             contextlib.redirect_stdout(buffer):
+            code = check_key.list_models("AQ.key")
+        out = buffer.getvalue()
+        self.assertEqual(code, 0)
+        self.assertIn("gemini-3.8-flash", out)
+        self.assertIn("gemini-2.5-pro", out)
+        self.assertNotIn("embedding-001", out)
+        self.assertIn("NEXCUT_MODELS=", out)
+
+
+class EnvDrivesResolution(unittest.TestCase):
+    def test_dotenv_provider_makes_the_default_a_gemini_id(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            env = check_key.read_env(pathlib.Path(tmp) / "missing.env")
+            env.update({"NEXCUT_PROVIDER": "gemini"})
+            original = {k: os.environ.get(k) for k in ("NEXCUT_PROVIDER", "NEXCUT_MODELS")}
+            os.environ.pop("NEXCUT_MODELS", None)
+            try:
+                check_key.load_env(env)
+                self.assertTrue(check_key.shipped_default_model().startswith("gemini-"))
+            finally:
+                for k, v in original.items():
+                    if v is None:
+                        os.environ.pop(k, None)
+                    else:
+                        os.environ[k] = v
+
+
 if __name__ == "__main__":
     unittest.main()

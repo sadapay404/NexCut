@@ -34,6 +34,12 @@ def read_env(path: Path = ROOT / ".env") -> dict[str, str]:
     return values
 
 
+def load_env(env: dict[str, str]) -> None:
+    """Let .env stand in for exported vars, so the tool and the server agree."""
+    for name, value in env.items():
+        os.environ.setdefault(name, value)
+
+
 def shipped_default_model() -> str:
     """Stay in step with the app instead of repeating a model id here."""
     sys.path.insert(0, str(ROOT))
@@ -42,6 +48,33 @@ def shipped_default_model() -> str:
         return default_model()
     except Exception:  # noqa: BLE001 - the tool must run standalone
         return "gemini-3.8-flash"
+
+
+def list_models(key: str) -> int:
+    """Print every id this key can call generateContent on."""
+    url = "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200"
+    req = urllib.request.Request(url, headers={"x-goog-api-key": key})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            payload = json.loads(r.read().decode() or "{}")
+    except urllib.error.HTTPError as exc:
+        print(f"HTTP {exc.code}\n{exc.read().decode()[:600]}")
+        return 1
+    except urllib.error.URLError as exc:
+        print(f"Could not reach Google: {exc.reason}")
+        return 1
+    usable = []
+    for model in payload.get("models", []):
+        methods = model.get("supportedGenerationMethods") or []
+        if "generateContent" in methods:
+            usable.append(model["name"].split("/")[-1])
+    usable.sort(reverse=True)
+    print(f"{len(usable)} model(s) this key may call:\n")
+    for name in usable:
+        print(f"  {name}")
+    print("\nUse one of them:")
+    print(f"  echo 'NEXCUT_MODELS={','.join(usable[:3])}' >> .env")
+    return 0
 
 
 SUGGESTION = re.compile(r"use (?:the )?models?/([A-Za-z0-9._\-]+)")
@@ -54,6 +87,7 @@ def check_key_suggestion(body: str) -> str:
 
 def main(argv: list[str]) -> int:
     env = read_env()
+    load_env(env)
     key = (env.get("NEXCUT_API_KEY") or os.environ.get("NEXCUT_API_KEY", "")).strip()
     if len(argv) > 1:
         model = argv[1]
@@ -71,6 +105,9 @@ def main(argv: list[str]) -> int:
         return 2
     print(f"key  {key[:6]}…{key[-4:]}  ({len(key)} chars)")
     print(f"model {model}")
+
+    if model in ("--list", "-l", "list"):
+        return list_models(key)
 
     body = json.dumps({
         "contents": [{"role": "user", "parts": [{"text": "Reply with the single word READY."}]}],
