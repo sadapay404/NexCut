@@ -85,7 +85,9 @@ class ServerCase(unittest.TestCase):
         for key in ("models", "default_model", "windows", "niches", "subniches",
                     "audiences", "languages", "version"):
             self.assertIn(key, cfg)
-        self.assertEqual(cfg["default_window"], "E")
+        self.assertEqual(cfg["default_window"], "40-50")
+        self.assertEqual([w["id"] for w in cfg["windows"]], ["40-50", "60-90", "90-180", "custom"])
+        self.assertEqual((cfg["min_clips"], cfg["max_clips"]), (5, 15))
         self.assertIn("True Crime", cfg["subniches"])
 
     def test_health(self):
@@ -205,6 +207,36 @@ class ServerCase(unittest.TestCase):
         status, body = self.post(f"/api/jobs/{job_id}/cut", {"height": 1080})
         self.assertEqual(status, 409)
         self.assertIn("no video", body["detail"])
+
+    def test_zip_bundles_mp4s_and_details(self):
+        import io
+        import time
+        import zipfile
+        from nexcut.cutter import CutJob
+        from nexcut.cuts import CutManager
+        from nexcut.server import CUT_MANAGER
+
+        cut_id = "ziptest1"
+        directory = CUT_MANAGER.directory(cut_id)
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "clip-01.mp4").write_bytes(b"not-really-a-video")
+        (directory / "details.md").write_text("# run", encoding="utf-8")
+        with CUT_MANAGER._lock:
+            CUT_MANAGER._cuts[cut_id] = CutJob(id=cut_id, created=time.time(), quality="1080p")
+
+        with urllib.request.urlopen(self.base + f"/api/cuts/{cut_id}/zip", timeout=10) as res:
+            self.assertEqual(res.status, 200)
+            self.assertIn("application/zip", res.headers.get("Content-Type", ""))
+            blob = res.read()
+        names = zipfile.ZipFile(io.BytesIO(blob)).namelist()
+        self.assertIn("clip-01.mp4", names)
+        self.assertIn("details.md", names)
+        with CUT_MANAGER._lock:
+            CUT_MANAGER._cuts.pop(cut_id, None)
+
+    def test_zip_unknown_cut(self):
+        status, _ = self.get("/api/cuts/nope/zip")
+        self.assertEqual(status, 404)
 
     def test_cut_unknown_job(self):
         status, _ = self.post("/api/jobs/nope/cut", {"height": 1080})

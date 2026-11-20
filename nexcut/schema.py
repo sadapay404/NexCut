@@ -15,13 +15,23 @@ from typing import Any
 # [V] labels straight from GET /api/config. Option E is the default and is
 # described as "Oracle Wide Range"; its 5m25s ceiling is the odd one out and
 # strongly implies the window is enforced server-side as a hard bound.
+# UI windows (v8). The lettered options stay so old payloads keep validating.
 WINDOWS: dict[str, tuple[str, int, int]] = {
+    "40-50": ("40–50 s", 40, 50),
+    "60-90": ("60–90 s", 60, 90),
+    "90-180": ("90–180 s", 90, 180),
+    "custom": ("Custom range", 20, 600),
     "A": ("Option A: 30-60s", 30, 60),
     "B": ("Option B: 60-90s", 60, 90),
     "C": ("Option C: 90-180s", 90, 180),
     "D": ("Option D: 180-300s", 180, 300),
     "E": ("Option E: 45s-5m25s (Oracle Wide Range - default)", 45, 325),
 }
+
+DEFAULT_WINDOW = "40-50"
+MIN_CLIPS = 5
+MAX_CLIPS = 15
+AUTO_WINDOW_LABEL = "any length the transcript supports"
 
 SCORE_KEYS = ("curiosity", "stakes", "specificity", "speed")
 

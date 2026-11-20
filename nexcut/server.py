@@ -14,8 +14,10 @@ Env:
 
 from __future__ import annotations
 
+import io
 import json
 import mimetypes
+import zipfile
 import os
 import re
 from http import HTTPStatus
@@ -25,6 +27,8 @@ from urllib.parse import parse_qs, urlparse
 
 from . import __version__
 from .cutter import CutterError, MIN_HEIGHT, probe_heights, tool_status
+from .report import run_markdown
+from .schema import DEFAULT_WINDOW, MAX_CLIPS, MIN_CLIPS
 from .cuts import CutManager
 from .ingest import IngestError, fetch_transcript, video_id as parse_video_id
 from .jobs import JobManager
@@ -60,11 +64,10 @@ SUBNICHES = {
     "Others": [],
 }
 WINDOW_OPTIONS = [
-    {"id": "A", "label": "Option A: 30–60s"},
-    {"id": "B", "label": "Option B: 60–90s"},
-    {"id": "C", "label": "Option C: 90–180s"},
-    {"id": "D", "label": "Option D: 180–300s"},
-    {"id": "E", "label": "Option E: 45s–5m25s (wide range — default)"},
+    {"id": "40-50", "label": "40–50 s"},
+    {"id": "60-90", "label": "60–90 s"},
+    {"id": "90-180", "label": "90–180 s"},
+    {"id": "custom", "label": "Custom range"},
 ]
 AUDIENCES = ["U.S. English", "Pakistani English", "UK English"]
 LANGUAGES = ["U.S. English", "Urdu-English mix", "Pure Urdu", "Pure English"]
@@ -84,7 +87,9 @@ def config_payload() -> dict:
         "models": models,
         "default_model": models[0]["id"],
         "windows": WINDOW_OPTIONS,
-        "default_window": "E",
+        "default_window": DEFAULT_WINDOW,
+        "min_clips": MIN_CLIPS,
+        "max_clips": MAX_CLIPS,
         "niches": NICHES,
         "subniches": SUBNICHES,
         "audiences": AUDIENCES,
@@ -189,6 +194,9 @@ class Handler(BaseHTTPRequestHandler):
             if m:
                 cut_job = CUT_MANAGER.get(m.group(1))
                 return self._json(200, cut_job.payload()) if cut_job else self._error(404, "Unknown cut job")
+            m = re.fullmatch(r"/api/cuts/([A-Za-z0-9_-]+)/zip", path)
+            if m:
+                return self._cut_zip(m.group(1))
             m = re.fullmatch(r"/api/cuts/([A-Za-z0-9_-]+)/file/([^/]+)", path)
             if m:
                 if not self._authorised():
@@ -291,6 +299,7 @@ class Handler(BaseHTTPRequestHandler):
                 cut_job = CUT_MANAGER.submit(
                     video_id=video_id, clips=clips, height=height,
                     title=job.result.get("video_title", ""),
+                    details=run_markdown(job.result),
                 )
                 return self._json(200, {"cut_id": cut_job.id})
             if path == "/api/transcript":
@@ -323,6 +332,23 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(404, "Not found")
         except Exception as exc:  # noqa: BLE001
             return self._error(500, f"Server error: {exc}")
+
+    def _cut_zip(self, cut_id: str):
+        cut_job = CUT_MANAGER.get(cut_id)
+        if not cut_job:
+            return self._error(404, "Unknown cut job")
+        directory = CUT_MANAGER.directory(cut_id).resolve()
+        if not directory.is_dir():
+            return self._error(404, "That cut is gone")
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as bundle:
+            for item in sorted(directory.iterdir()):
+                if item.is_file() and item.name != "clips.zip":
+                    bundle.write(item, arcname=item.name)
+        data = buffer.getvalue()
+        name = f'nexcut-{cut_id}.zip'
+        return self._send(200, data, "application/zip",
+                          {"Content-Disposition": f'attachment; filename="{name}"'})
 
     def _cut_file(self, cut_id: str, filename: str):
         if not re.fullmatch(r"[A-Za-z0-9._-]+", filename or ""):

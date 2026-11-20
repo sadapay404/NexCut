@@ -20,7 +20,7 @@ from .ingest import IngestError, fetch_transcript
 from .parse import ExtractError, build_result, ensure_timestamps
 from .prompt import format_ranges, plan_sweep
 from .prompts import compose
-from .schema import WINDOWS
+from .schema import MAX_CLIPS, MIN_CLIPS, WINDOWS
 from .validate import apply_rules
 
 MAX_JOBS = 60
@@ -129,6 +129,8 @@ class JobManager:
 
             requested = int(p.get("num_clips") or 0)   # 0 or blank = AUTO
             auto_count = requested <= 0
+            if not auto_count:
+                requested = max(MIN_CLIPS, min(MAX_CLIPS, requested))
 
             window = p.get("window") or "E"
             custom_min = p.get("custom_min_sec")

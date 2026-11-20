@@ -47,7 +47,7 @@ class CutManager:
 
     # -- submission --------------------------------------------------------
     def submit(self, *, video_id: str, clips: list[dict], height: int,
-               title: str = "") -> CutJob:
+               title: str = "", details: str = "") -> CutJob:
         job = CutJob(id=uuid.uuid4().hex[:12], created=time.time(),
                      quality=f"{height}p" if height < 2160 else "2160p (4K)")
         with self._lock:
@@ -55,6 +55,10 @@ class CutManager:
             if len(self._cuts) > MAX_CUTS:
                 for old in sorted(self._cuts.values(), key=lambda j: j.created)[:-MAX_CUTS]:
                     self._cuts.pop(old.id, None)
+        out_dir = self.directory(job.id)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        if details:
+            (out_dir / "details.md").write_text(details, encoding="utf-8")
         threading.Thread(
             target=self._run, args=(job, video_id, clips, height), daemon=True
         ).start()

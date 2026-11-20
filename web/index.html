@@ -70,8 +70,8 @@
 
     <div class="card-body">
 
-      <!-- landing -->
-      <section class="landing" id="landingPane">
+      <!-- 1 · landing -->
+      <section class="landing" id="landPane">
         <p class="kicker">NexCut <span class="dash">/</span> cutter</p>
         <h1 class="display" id="emptyTitle">Sheikh Arsalan<br><em>Automation</em></h1>
         <p class="sub" id="emptyNote">Paste a YouTube link. Captions, model pass, rule check and the cut run on this machine.</p>
@@ -81,115 +81,103 @@
             <svg class="ic lead"><use href="#i-link"/></svg>
             <input id="ytUrl" type="text" inputmode="url" autocomplete="off" spellcheck="false"
                    aria-label="YouTube link" placeholder="Paste a YouTube link…">
-            <button class="btn primary" id="runBtn" type="button">
-              <span>Extract</span><kbd>⌘↵</kbd>
+            <button class="btn primary" id="fetchBtn" type="button">
+              <span>Fetch</span><kbd>↵</kbd>
             </button>
           </div>
-
-          <div class="underbar">
-            <button class="chip-btn" id="optionsToggle" type="button" aria-expanded="false" aria-controls="optionsPanel">
-              <svg class="ic"><use href="#i-sliders"/></svg>Options
-              <svg class="ic caret"><use href="#i-chevron"/></svg>
-            </button>
-            <button class="chip-btn" id="transcriptToggle" type="button" aria-expanded="false" aria-controls="transcriptPanel">
-              <svg class="ic"><use href="#i-captions"/></svg>Transcript <b id="charBadge">empty</b>
-            </button>
-            <button class="chip-btn" id="sampleBtn" type="button">Sample</button>
-            <button class="chip-btn" id="historyToggle" type="button" aria-expanded="false" aria-controls="historyPanel">
-              <svg class="ic"><use href="#i-history"/></svg>History
-            </button>
-          </div>
-
           <p class="source" id="sourceState">No source</p>
         </div>
+      </section>
 
-        <!-- options drawer -->
-        <div class="drawer" id="optionsPanel" hidden>
-          <div class="fields">
-            <label class="field">
-              <span class="lbl">Niche</span>
-              <select id="nicheSel"></select>
-            </label>
-            <label class="field" id="subWrap" hidden>
-              <span class="lbl">Sub-category</span>
-              <select id="subSel"></select>
-            </label>
-            <label class="field">
-              <span class="lbl">Audience</span>
-              <select id="audienceSel"></select>
-            </label>
-            <label class="field">
-              <span class="lbl">Language</span>
-              <select id="langSel"></select>
-            </label>
-            <label class="field">
-              <span class="lbl">Clip length</span>
-              <select id="windowSel"></select>
-            </label>
-            <label class="field">
-              <span class="lbl">Clips</span>
-              <input id="numClips" type="number" min="1" max="12" step="1" value="5">
-            </label>
-            <label class="field" id="customMinWrap" hidden>
-              <span class="lbl">Min seconds</span>
-              <input id="customMin" type="number" min="10" value="45">
-            </label>
-            <label class="field" id="customMaxWrap" hidden>
-              <span class="lbl">Max seconds</span>
-              <input id="customMax" type="number" min="15" value="90">
-            </label>
-            <label class="field wide">
-              <span class="lbl">Model</span>
-              <select id="modelSel"></select>
-            </label>
-          </div>
-          <div class="drawer-foot">
-            <label class="check"><input id="cascadeToggle" type="checkbox" checked>Fallback model if the first fails</label>
-          </div>
-        </div>
+      <!-- 2 · details + config -->
+      <section class="setup" id="setupPane" hidden>
+        <section class="block">
+          <header class="block-head">
+            <h4>Details</h4>
+            <span class="badge" id="detailBadge">ready</span>
+          </header>
 
-        <!-- transcript drawer -->
-        <div class="drawer" id="transcriptPanel" hidden>
-          <textarea id="transcript" spellcheck="false"
-                    placeholder="00:00:08 - line as spoken&#10;00:00:16 - next line"></textarea>
-          <div class="drawer-foot">
-            <button class="ghost-btn" id="uploadBtn" type="button">
-              <svg class="ic"><use href="#i-upload"/></svg>Upload .txt / .srt / .vtt
+          <dl class="facts">
+            <div><dt>Title</dt><dd id="factTitle">—</dd></div>
+            <div><dt>Channel</dt><dd id="factChannel">—</dd></div>
+            <div><dt>Length</dt><dd id="factLength">—</dd></div>
+            <div><dt>Captions</dt><dd id="factCaptions">—</dd></div>
+            <div><dt>Transcript</dt><dd id="factTranscript">—</dd></div>
+            <div><dt>Niche</dt><dd id="factNiche">detected by the model on extract</dd></div>
+          </dl>
+
+          <div class="row-actions">
+            <button class="ghost-btn" id="viewTranscript" type="button">
+              <svg class="ic"><use href="#i-download"/></svg>View transcript
             </button>
-            <span class="note">One timestamp per line.</span>
+            <button class="ghost-btn" id="ownTranscript" type="button" aria-expanded="false">
+              <svg class="ic"><use href="#i-captions"/></svg>Provide own transcript
+            </button>
           </div>
-          <input id="fileInput" type="file" accept=".txt,.srt,.vtt" hidden>
-        </div>
 
-        <!-- history drawer -->
-        <div class="drawer" id="historyPanel" hidden>
-          <div id="recentBody"></div>
-          <div class="drawer-foot">
-            <button class="ghost-btn" id="clearRecent" type="button">Clear</button>
-            <span class="note">Kept in this browser only.</span>
+          <div class="own" id="ownTranscriptBox" hidden>
+            <textarea id="transcript" spellcheck="false"
+                      placeholder="00:00:08 - line as spoken&#10;00:00:16 - next line"></textarea>
+            <div class="row-actions">
+              <button class="ghost-btn" id="uploadBtn" type="button">
+                <svg class="ic"><use href="#i-upload"/></svg>Upload .txt / .srt / .vtt
+              </button>
+              <span class="note" id="ownNote">One timestamp per line.</span>
+            </div>
+            <input id="fileInput" type="file" accept=".txt,.srt,.vtt" hidden>
           </div>
-        </div>
+        </section>
 
-        <div class="chips" id="dashConfig"></div>
+        <section class="block config">
+          <header class="block-head">
+            <h4>Config</h4>
+            <span class="badge" id="clipCountBadge">AUTO</span>
+          </header>
+
+          <label class="field">
+            <span class="lbl">Clips</span>
+            <input id="numClips" type="number" min="5" max="15" step="1" placeholder="AUTO">
+          </label>
+          <p class="hint">Leave empty for AUTO — the model decides from the video length.</p>
+
+          <div class="seg" id="lenSeg" role="group" aria-label="Clip length">
+            <button type="button" data-len="40-50" aria-selected="true">40–50 s</button>
+            <button type="button" data-len="60-90">60–90 s</button>
+            <button type="button" data-len="90-180">90–180 s</button>
+            <button type="button" data-len="custom">Custom</button>
+          </div>
+
+          <div class="custom-len" id="customLen" hidden>
+            <label class="field"><span class="lbl">Min s</span><input id="customMin" type="number" min="20" max="590" value="45"></label>
+            <label class="field"><span class="lbl">Max s</span><input id="customMax" type="number" min="25" max="600" value="90"></label>
+          </div>
+
+          <button class="btn primary block big" id="runBtn" type="button">
+            <svg class="ic"><use href="#i-scissors"/></svg>Extract Clips
+          </button>
+          <p class="hint" id="configHint">1080p MP4s, cut frame-exact.</p>
+        </section>
       </section>
 
-      <!-- running -->
-      <section class="run" id="progressPane" hidden>
-        <div class="run-head">
-          <div>
-            <p class="kicker">Working</p>
-            <h2 id="stageText">Queued</h2>
+      <!-- 3 · working -->
+      <section class="work" id="workPane" hidden>
+        <div class="work-inner">
+          <p class="kicker">Working</p>
+          <h2 id="stageText">Queued</h2>
+          <div class="bar"><i id="barFill"></i></div>
+          <div class="work-meta">
+            <span class="pct" id="pctText">0%</span>
+            <span class="note" id="workHint"></span>
           </div>
-          <span class="pct" id="pctText">0%</span>
+          <pre class="log" id="stageLog" aria-live="polite"></pre>
+          <div class="credits-slot" id="creditsSlot"></div>
         </div>
-        <div class="bar"><i id="barFill"></i></div>
-        <pre class="log" id="stageLog" aria-live="polite"></pre>
       </section>
 
-      <!-- error -->
+      <!-- 4 · failure -->
       <section class="fail" id="errorPane" hidden></section>
 
-      <!-- results -->
+      <!-- 5 · results -->
       <section class="res" id="resultsPane" hidden>
         <header class="res-head">
           <div class="res-id">
@@ -198,77 +186,33 @@
             <p class="res-meta" id="resMeta"></p>
           </div>
           <div class="res-actions">
+            <label class="switch" title="Download every clip plus details.md as one file">
+              <input type="checkbox" id="zipToggle">
+              <span>Download as ZIP</span>
+            </label>
             <button class="chip-btn" id="copyJsonBtn" type="button"><svg class="ic"><use href="#i-copy"/></svg>Answer</button>
-            <button class="chip-btn" id="downloadBtn" type="button"><svg class="ic"><use href="#i-download"/></svg>Save</button>
             <button class="btn small" id="newRunBtn" type="button">New link</button>
           </div>
         </header>
 
         <div class="res-stats">
           <div class="stat"><b id="statCandidates">0</b><span>found</span></div>
-          <div class="stat"><b id="statKept">0</b><span>kept</span></div>
+          <div class="stat"><b id="statKept">0</b><span>clips</span></div>
           <div class="stat"><b id="statRejected">0</b><span>rejected</span></div>
-          <div class="stat"><b id="statRequested">0</b><span>asked for</span></div>
+          <div class="stat"><b id="statRequested">AUTO</b><span>asked for</span></div>
         </div>
 
-        <div class="res-body">
-          <div class="res-main">
-            <div class="tabs" id="segTabs" role="tablist">
-              <button role="tab" data-view="clips" aria-selected="true" type="button">Clips<span id="tabClipsN">0</span></button>
-              <button role="tab" data-view="rejected" aria-selected="false" type="button">Rejected<span id="tabRejectedN">0</span></button>
-              <button role="tab" data-view="raw" aria-selected="false" type="button">Answer</button>
-            </div>
-
-            <div id="viewClips" class="view">
-              <table class="grid">
-                <thead><tr>
-                  <th class="c-n">#</th>
-                  <th>Clip</th>
-                  <th class="c-d">Length</th>
-                  <th class="c-s">Score</th>
-                </tr></thead>
-                <tbody id="clipRows"></tbody>
-              </table>
-              <p class="note pad" id="clipsEmpty" hidden>No clip passed the rule check.</p>
-            </div>
-
-            <div id="viewRejected" class="view" hidden>
-              <ul class="rejects" id="rejectedList"></ul>
-              <p class="note pad" id="rejectedEmpty" hidden>Nothing rejected.</p>
-            </div>
-
-            <div id="viewRaw" class="view" hidden>
-              <pre class="raw" id="rawAnswer"></pre>
-            </div>
-          </div>
-
-          <aside class="detail">
-            <header class="detail-head">
-              <div class="detail-id">
-                <h3 id="inspTitle">Clip 1</h3>
-                <span class="mono" id="inspTime"></span>
-              </div>
-              <div class="detail-actions">
-                <a class="open-link" id="clipLink" href="#" target="_blank" rel="noreferrer" hidden>
-                  Open<svg class="ic"><use href="#i-external"/></svg>
-                </a>
-                <span class="score-lg" id="inspScore"></span>
-              </div>
-            </header>
-            <div class="detail-body" id="inspBody"></div>
-          </aside>
+        <div class="res-list" id="resListWrap">
+          <ul class="clips" id="clipList"></ul>
         </div>
 
         <footer class="export">
           <div class="export-row">
             <span class="export-label"><svg class="ic"><use href="#i-scissors"/></svg>Cut</span>
-            <select id="qualitySel" aria-label="Export quality"></select>
-            <button class="btn small primary" id="cutBtn" type="button" disabled>Cut MP4s</button>
             <div class="export-track" id="cutTrack" hidden><div class="bar thin"><i id="cutFill"></i></div></div>
             <span class="note export-state" id="cutState"></span>
-            <span class="mono export-q" id="exportQuality"></span>
+            <a class="btn small primary" id="zipBtn" href="#" hidden download>Download ZIP</a>
           </div>
-          <ul class="files" id="fileList"></ul>
         </footer>
       </section>
     </div>
@@ -306,7 +250,7 @@
   </article>
 </main>
 
-<footer class="credits">
+<footer class="credits" id="credits">
   Proudly created by <b>Sheikh Arsalan</b> in collaboration with <b>Mubashir</b>
 </footer>
 
