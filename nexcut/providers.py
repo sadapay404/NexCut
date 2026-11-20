@@ -113,10 +113,23 @@ def parse_keys(*sources: str) -> list[str]:
     return out
 
 
+# the providers' own conventional names, so pasted credentials just work
+PROVIDER_KEY_VARS = {
+    "cloudflare": ("CLOUDFLARE_API_TOKEN",),
+    "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+    "groq": ("GROQ_API_KEY",),
+    "openai": ("OPENAI_API_KEY",),
+}
+
+
 def env_keys() -> list[str]:
-    """NEXCUT_API_KEY, then NEXCUT_BACKUP_KEY, then everything in NEXCUT_API_KEYS."""
+    """NEXCUT_API_KEY, the provider's own variable, backup, then NEXCUT_API_KEYS."""
+    kind = provider_kind()
+    native = PROVIDER_KEY_VARS.get(provider_label() if provider_label() in PROVIDER_KEY_VARS
+                                  else kind, ())
     return parse_keys(
         os.environ.get("NEXCUT_API_KEY", ""),
+        *[os.environ.get(name, "") for name in native],
         os.environ.get("NEXCUT_BACKUP_KEY", ""),
         os.environ.get("NEXCUT_API_KEYS", ""),
     )
@@ -534,8 +547,12 @@ class StubProvider:
 
 
 def make_provider(api_key: str = "") -> object:
-    # the browser no longer asks for a key: NEXCUT_API_KEY (or .env) wins
+    # the browser no longer asks for a key: NEXCUT_API_KEY (or .env) wins, then the
+    # provider's own conventional variable
     api_key = (api_key or os.environ.get("NEXCUT_API_KEY", "")).strip()
+    if not api_key:
+        keys = env_keys()
+        api_key = keys[0] if keys else ""
     kind = provider_kind()
     if kind == "gemini":
         return GeminiProvider(api_key)
