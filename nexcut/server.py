@@ -130,7 +130,11 @@ def key_status() -> tuple[int, dict]:
     """One tiny model call: proves the key in .env works before a real run."""
     from .providers import ProviderError, make_provider  # noqa: PLC0415
 
-    model = os.environ.get("NEXCUT_MODEL", "").strip() or DEFAULT_MODEL
+    # same model the runs will use: NEXCUT_MODEL, else the head of NEXCUT_MODELS
+    model = os.environ.get("NEXCUT_MODEL", "").strip()
+    if not model:
+        first = (os.environ.get("NEXCUT_MODELS", "") or "").split(",")[0].strip()
+        model = first or DEFAULT_MODEL
     try:
         provider = make_provider("")
     except Exception as exc:  # noqa: BLE001

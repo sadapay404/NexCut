@@ -91,6 +91,24 @@ class KeyCheckRouteTests(unittest.TestCase):
         self.assertIn("rejected", body["detail"])
         self.assertIn("restart the server", body["hint"])
 
+    def test_models_env_decides_which_model_is_tested(self):
+        seen = {}
+
+        class Fake:
+            name = "gemini"
+
+            def complete(self, **kw):
+                seen.update(kw)
+                return "READY", kw["model"]
+
+        env = {"NEXCUT_MODELS": "gemini-2.5-pro,gemini-2.5-flash", "NEXCUT_MODEL": ""}
+        with mock.patch.dict(os.environ, env), \
+             mock.patch("nexcut.providers.make_provider", return_value=Fake()):
+            code, body = server.key_status()
+        self.assertEqual(code, 200)
+        self.assertEqual(seen["model"], "gemini-2.5-pro")
+        self.assertEqual(body["model"], "gemini-2.5-pro")
+
     def test_route_exists(self):
         with open(server.__file__, encoding="utf-8") as fh:
             self.assertIn("/api/health/key", fh.read())
