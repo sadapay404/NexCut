@@ -71,7 +71,7 @@ class ClientIdentity(unittest.TestCase):
     def test_web_headers_and_consent_cookie(self):
         url, headers = ingest.player_request(self.client("web"))
         self.assertEqual(headers["x-youtube-client-name"], "1")
-        self.assertIn("clientVersion", headers["x-youtube-client-version"])
+        self.assertEqual(headers["x-youtube-client-version"], "2.20250201.00.00")
         self.assertIn("CONSENT=", headers["cookie"])
 
     def test_every_client_name_matches_its_numeric_id(self):
