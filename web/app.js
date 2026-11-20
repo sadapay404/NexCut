@@ -1,7 +1,6 @@
-/* SAA Clip Studio — client
-   Plain DOM, no framework. Model output is written with textContent only.
-   Every render path is wrapped so a bad payload shows a readable error instead
-   of a blank screen. */
+/* SAA Clip Studio — client.
+   Plain DOM. Model output is written with textContent only.
+   Every render path is wrapped so a bad payload shows a readable error card. */
 "use strict";
 
 const $ = (id) => document.getElementById(id);
@@ -17,7 +16,7 @@ const SAMPLE = `00:00:00 - Nobody talks about what happened on the third floor.
 00:01:12 - Nobody has been able to explain that part.
 00:01:21 - The hotel settled the case before it reached a courtroom.`;
 
-const STATE = {
+const S = {
   cfg: null,
   tools: null,
   jobId: null,
@@ -25,10 +24,11 @@ const STATE = {
   payload: null,
   selected: 0,
   view: "clips",
+  caption: { state: "idle", detail: "No link" },
   timers: { fetch: null, poll: null, cut: null },
 };
 
-/* ── small helpers ───────────────────────────────────── */
+/* ── helpers ─────────────────────────────────────────── */
 async function api(path, opts = {}) {
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
@@ -43,11 +43,11 @@ async function api(path, opts = {}) {
   return data;
 }
 
-function hms(sec) {
+const hms = (sec) => {
   const s = Math.max(0, Math.round(Number(sec) || 0));
   return [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60]
     .map((n) => String(n).padStart(2, "0")).join(":");
-}
+};
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -56,32 +56,40 @@ function el(tag, cls, text) {
   return n;
 }
 
-function hint(node, text, kind) {
+function icon(name) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "ic");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", `#i-${name}`);
+  svg.appendChild(use);
+  return svg;
+}
+
+function note(node, text, kind) {
   node.textContent = text;
-  node.className = "hint" + (kind ? " " + kind : "");
+  node.className = "note" + (kind ? " " + kind : "");
 }
 
-function badge(wrap, textNode, text, kind) {
+function pill(wrap, textNode, text, kind) {
   textNode.textContent = text;
-  wrap.className = "badge" + (kind ? " " + kind : "");
+  wrap.className = "pill" + (kind ? " " + kind : "");
 }
 
-function status(text, detail) {
-  $("statusText").textContent = text;
+function status(main, detail) {
+  $("statusText").textContent = main;
   $("statusHint").textContent = detail || "";
 }
 
 function toast(message) {
-  const box = $("toasts");
   const node = el("div", "toast", message);
-  box.appendChild(node);
-  setTimeout(() => node.remove(), 1900);
+  $("toasts").appendChild(node);
+  setTimeout(() => node.remove(), 1800);
 }
 
 function copy(text) {
   navigator.clipboard.writeText(text).then(
     () => toast("Copied"),
-    () => toast("Copy blocked by browser")
+    () => toast("Copy blocked")
   );
 }
 
@@ -90,56 +98,65 @@ document.addEventListener("DOMContentLoaded", boot);
 
 async function boot() {
   if (localStorage.getItem("saa_theme") === "light") document.body.classList.add("light");
+  setThemeIcon();
 
   try {
-    STATE.cfg = await api("/api/config");
+    S.cfg = await api("/api/config");
   } catch (e) {
-    renderFatal("Server unreachable", e.message,
-      "Start the studio with: python3 -m nexcut.server");
+    renderError("Server unreachable", e.message, "Start the studio: python3 -m nexcut.server");
     return;
   }
+  S.tools = S.cfg.tools || { can_cut: false, hints: {} };
 
-  STATE.tools = STATE.cfg.tools || { can_cut: false, hints: {} };
+  const stub = S.cfg.provider === "stub";
+  pill($("providerBadge"), $("providerText"), stub ? "demo" : S.cfg.provider, stub ? "warn" : "ok");
+  const master = !!(S.cfg.prompt && S.cfg.prompt.master_loaded);
+  pill($("promptBadge"), $("promptText"), master ? "master.md" : "built-in", master ? "ok" : "warn");
+  pill($("toolsBadge"), $("toolsText"), S.tools.can_cut ? "ready" : "unavailable",
+    S.tools.can_cut ? "ok" : "bad");
 
-  const stub = STATE.cfg.provider === "stub";
-  badge($("providerBadge"), $("providerText"), stub ? "offline demo" : STATE.cfg.provider,
-    stub ? "warn" : "ok");
-  const master = !!(STATE.cfg.prompt && STATE.cfg.prompt.master_loaded);
-  badge($("promptBadge"), $("promptText"), master ? "master.md" : "built-in", master ? "ok" : "warn");
-  badge($("toolsBadge"), $("toolsText"), STATE.tools.can_cut ? "ready" : "unavailable",
-    STATE.tools.can_cut ? "ok" : "bad");
-
-  $("statusProvider").textContent = STATE.cfg.provider || "";
-  $("statusVersion").textContent = STATE.cfg.version || "";
-  hint($("providerNote"), stub
-    ? "Offline demo provider — no key required."
+  $("statusProvider").textContent = S.cfg.provider || "";
+  $("statusVersion").textContent = S.cfg.version || "";
+  note($("providerNote"), stub
+    ? "Offline demo — no key required."
     : "Key is used for this run only.");
 
   buildControls();
   wire();
   restoreKey();
   updateCounts();
-  renderEmpty();
-  status("Ready");
+  renderDashboard();
+  status("Ready", master ? "prompt: master.md" : "prompt: built-in");
 }
 
 function buildControls() {
   const niche = $("nicheSel");
-  (STATE.cfg.niches || []).forEach((n) => niche.appendChild(new Option(n.id, n.id)));
+  (S.cfg.niches || []).forEach((n) => niche.appendChild(new Option(n.id, n.id)));
   if (niche.options.length) { niche.value = niche.options[0].value; fillSubs(niche.value); }
 
-  (STATE.cfg.audiences || []).forEach((x) => $("audienceSel").appendChild(new Option(x, x)));
-  (STATE.cfg.languages || []).forEach((x) => $("langSel").appendChild(new Option(x, x)));
-  (STATE.cfg.models || []).forEach((x) => $("modelSel").appendChild(new Option(x.label || x.id, x.id)));
-  (STATE.cfg.windows || []).forEach((x) => $("windowSel").appendChild(new Option(x.label || x.id, x.id)));
+  (S.cfg.audiences || []).forEach((x) => $("audienceSel").appendChild(new Option(x, x)));
+  (S.cfg.languages || []).forEach((x) => $("langSel").appendChild(new Option(x, x)));
+  (S.cfg.models || []).forEach((x) => $("modelSel").appendChild(new Option(x.label || x.id, x.id)));
 
-  if (STATE.cfg.default_window) $("windowSel").value = STATE.cfg.default_window;
-  if (STATE.cfg.default_model) $("modelSel").value = STATE.cfg.default_model;
+  // shorten "Option E: 45s–5m25s (Oracle Wide Range - default)" -> "45s–5m25s"
+  (S.cfg.windows || []).forEach((w) => {
+    const full = String(w.label || w.id);
+    const label = full
+      .replace(/^Option\s*[A-Z]\s*:\s*/i, "")
+      .replace(/\s*\(.*?\)\s*$/, "")
+      .trim();
+    const opt = new Option(label, w.id);
+    opt.title = full;
+    $("windowSel").appendChild(opt);
+  });
+
+  if (S.cfg.default_window) $("windowSel").value = S.cfg.default_window;
+  if (S.cfg.default_model) $("modelSel").value = S.cfg.default_model;
 }
 
 function fillSubs(base) {
   const sel = $("subSel");
-  const subs = (STATE.cfg.subniches || {})[base] || [];
+  const subs = (S.cfg.subniches || {})[base] || [];
   sel.textContent = "";
   sel.appendChild(new Option("—", ""));
   subs.forEach((s) => sel.appendChild(new Option(s, s)));
@@ -147,36 +164,51 @@ function fillSubs(base) {
   sel.value = "";
 }
 
-function nicheValue() {
+const nicheValue = () => {
   const base = $("nicheSel").value;
   const sub = $("subSel").value;
   return sub ? `${base} — ${sub}` : base;
-}
+};
 
 /* ── wiring ──────────────────────────────────────────── */
 function wire() {
   $("themeBtn").onclick = () => {
     const light = document.body.classList.toggle("light");
     localStorage.setItem("saa_theme", light ? "light" : "dark");
+    setThemeIcon();
   };
 
-  $("nicheSel").onchange = () => fillSubs($("nicheSel").value);
-
-  $("ytUrl").addEventListener("input", () => {
-    clearTimeout(STATE.timers.fetch);
-    const url = $("ytUrl").value.trim();
-    if (!url) { hint($("sourceState"), "No source"); return; }
-    hint($("sourceState"), "Reading link…");
-    STATE.timers.fetch = setTimeout(() => fetchCaptions(url), 700);
+  $("nicheSel").onchange = () => { fillSubs($("nicheSel").value); renderDashboard(); };
+  ["subSel", "audienceSel", "langSel", "numClips", "windowSel", "modelSel"].forEach((id) => {
+    $(id).addEventListener("change", renderDashboard);
   });
 
-  $("transcript").addEventListener("input", updateCounts);
+  $("ytUrl").addEventListener("input", () => {
+    clearTimeout(S.timers.fetch);
+    const url = $("ytUrl").value.trim();
+    if (!url) {
+      S.caption = { state: "idle", detail: "No link" };
+      note($("sourceState"), "No source");
+      renderDashboard();
+      return;
+    }
+    S.caption = { state: "fetching", detail: "Fetching captions…" };
+    note($("sourceState"), "Fetching captions…");
+    renderDashboard();
+    S.timers.fetch = setTimeout(() => fetchCaptions(url), 700);
+  });
+
+  $("transcript").addEventListener("input", () => { updateCounts(); renderDashboard(); });
+
   $("sampleBtn").onclick = () => {
     $("transcript").value = SAMPLE;
     $("transcriptFold").open = true;
     updateCounts();
-    hint($("sourceState"), "Sample transcript loaded", "ok");
+    S.caption = { state: "ready", detail: "Sample transcript" };
+    note($("sourceState"), "Sample transcript loaded", "ok");
+    renderDashboard();
   };
+
   $("uploadBtn").onclick = () => $("fileInput").click();
   $("fileInput").onchange = uploadFile;
 
@@ -188,45 +220,42 @@ function wire() {
   };
   $("apiKey").addEventListener("input", () => {
     if ($("rememberKey").checked) localStorage.setItem("saa_key", $("apiKey").value);
+    renderDashboard();
   });
   $("rememberKey").onchange = () => {
     if ($("rememberKey").checked) localStorage.setItem("saa_key", $("apiKey").value);
     else localStorage.removeItem("saa_key");
   };
 
-  $("windowSel").onchange = () => {
+  $("windowSel").addEventListener("change", () => {
     const custom = $("windowSel").value === "E";
     $("customMinWrap").hidden = !custom;
     $("customMaxWrap").hidden = !custom;
-  };
+  });
 
   $("runBtn").onclick = run;
   $("cutBtn").onclick = startCut;
-  $("newRunBtn").onclick = () => { showPane("emptyPane"); renderEmpty(); };
-
-  $("copyJsonBtn").onclick = () => {
-    if (STATE.result) copy(STATE.result.oracle_report || "");
-  };
-  $("downloadBtn").onclick = () => {
-    if (!STATE.result) return;
-    const blob = new Blob([STATE.result.oracle_report || ""], { type: "text/plain" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `clips-${STATE.result.video_id || "session"}.txt`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
-    toast("Download started");
-  };
+  $("newRunBtn").onclick = () => { showPane("emptyPane"); renderDashboard(); };
+  $("copyJsonBtn").onclick = () => { if (S.result) copy(S.result.oracle_report || ""); };
+  $("downloadBtn").onclick = downloadReport;
+  $("clearRecent").onclick = () => { localStorage.removeItem("saa_recent"); renderDashboard(); };
 
   $("segTabs").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-view]");
     if (btn) setView(btn.dataset.view);
   });
 
+  $("toolsBadge").onclick = () => {
+    const hints = S.tools.hints || {};
+    const msg = S.tools.can_cut
+      ? "ffmpeg and yt-dlp detected."
+      : [hints.ffmpeg, hints.yt_dlp].filter(Boolean).join(" ");
+    toast(msg || "Cutting unavailable");
+  };
+
   document.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-copy]");
-    if (!btn) return;
-    copy(btn.dataset.copy);
+    if (btn) copy(btn.dataset.copy);
   });
 
   document.addEventListener("keydown", (e) => {
@@ -234,7 +263,28 @@ function wire() {
       e.preventDefault();
       if (!$("runBtn").disabled) run();
     }
+    if (e.key === "Escape" && !$("resultsPane").hidden) {
+      showPane("emptyPane");
+      renderDashboard();
+    }
   });
+
+  /* drop a transcript anywhere */
+  ["dragover", "drop"].forEach((type) => {
+    document.addEventListener(type, (e) => {
+      e.preventDefault();
+      if (type !== "drop") return;
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) loadFile(file);
+    });
+  });
+}
+
+function setThemeIcon() {
+  const light = document.body.classList.contains("light");
+  $("themeBtn").innerHTML = "";
+  const svg = icon(light ? "sun" : "moon");
+  $("themeBtn").appendChild(svg);
 }
 
 function restoreKey() {
@@ -252,7 +302,11 @@ function updateCounts() {
 
 async function uploadFile() {
   const file = $("fileInput").files[0];
-  if (!file) return;
+  if (file) await loadFile(file);
+  $("fileInput").value = "";
+}
+
+async function loadFile(file) {
   const form = new FormData();
   form.append("file", file);
   try {
@@ -262,96 +316,162 @@ async function uploadFile() {
     $("transcript").value = data.text;
     $("transcriptFold").open = true;
     updateCounts();
-    hint($("sourceState"), `${file.name} — ${data.chars.toLocaleString()} characters`, "ok");
+    S.caption = { state: "ready", detail: file.name };
+    note($("sourceState"), `${file.name} — ${data.chars.toLocaleString()} characters`, "ok");
+    renderDashboard();
   } catch (e) {
-    hint($("sourceState"), e.message, "bad");
+    note($("sourceState"), e.message, "bad");
   }
-  $("fileInput").value = "";
 }
 
 async function fetchCaptions(url) {
-  hint($("sourceState"), "Fetching captions…");
-  status("Fetching captions");
   try {
     const data = await api("/api/transcript", { method: "POST", body: JSON.stringify({ url }) });
     $("transcript").value = data.text;
     $("transcriptFold").open = false;
     updateCounts();
-    const kind = data.is_auto ? "auto" : "published";
-    hint($("sourceState"), `${kind} captions · ${data.lines} lines · ${hms(data.seconds)}`, "ok");
-    status("Captions ready", `${data.lines} lines`);
+    S.caption = {
+      state: "ready",
+      detail: `${data.is_auto ? "auto" : "published"} · ${data.lines} lines · ${hms(data.seconds)}`,
+    };
+    note($("sourceState"), S.caption.detail, "ok");
     if (data.title) document.title = `${data.title} — Clip Studio`;
+    status("Captions ready", `${data.lines} lines`);
   } catch (e) {
-    hint($("sourceState"), [e.message, e.hint].filter(Boolean).join(" "), "bad");
-    status("Captions unavailable", e.message);
+    S.caption = { state: "failed", detail: e.message };
+    note($("sourceState"), [e.message, e.hint].filter(Boolean).join(" "), "bad");
     $("transcriptFold").open = true;
+    status("Captions unavailable", e.message);
   }
+  renderDashboard();
+}
+
+/* ── dashboard ───────────────────────────────────────── */
+function renderDashboard() {
+  const niche = nicheValue();
+  const model = $("modelSel").value;
+  const length = $("windowSel").selectedOptions[0];
+  const stamps = ($("transcript").value.match(/^\s*\[?\d{1,2}:\d{2}/gm) || []).length;
+
+  /* config chips */
+  const box = $("dashConfig");
+  box.textContent = "";
+  [
+    ["Niche", niche],
+    ["Audience", $("audienceSel").value],
+    ["Clips", $("numClips").value],
+    ["Length", length ? length.textContent : ""],
+    ["Model", model],
+  ].forEach(([k, v]) => {
+    if (!v) return;
+    const chip = el("span", "chip");
+    chip.appendChild(el("b", null, k));
+    chip.appendChild(document.createTextNode(v));
+    box.appendChild(chip);
+  });
+
+  /* pipeline */
+  const steps = [
+    {
+      icon: "captions", name: "Captions",
+      state: S.caption.detail,
+      tone: S.caption.state === "ready" ? "done" : S.caption.state === "failed" ? "" : "ready",
+    },
+    {
+      icon: "scan", name: "Transcript check",
+      state: stamps ? `${stamps} timestamps` : "no timestamps yet",
+      tone: stamps ? "done" : "",
+    },
+    {
+      icon: "chip", name: "Model",
+      state: model || "none",
+      tone: model ? "done" : "",
+    },
+    {
+      icon: "shield", name: "Rule gate",
+      state: "6 rules · 8.0 threshold",
+      tone: "done",
+    },
+    {
+      icon: "scissors", name: "Export",
+      state: S.tools.can_cut ? "ffmpeg ready" : "ffmpeg missing",
+      tone: S.tools.can_cut ? "done" : "",
+    },
+  ];
+  const list = $("pipeline");
+  list.textContent = "";
+  steps.forEach((step) => {
+    const li = el("li", step.tone);
+    const dot = el("div", "step-dot");
+    dot.appendChild(icon(step.icon));
+    li.appendChild(dot);
+    const body = el("div", "step-body");
+    body.appendChild(el("div", "step-name", step.name));
+    body.appendChild(el("div", "step-state", step.state));
+    li.appendChild(body);
+    list.appendChild(li);
+  });
+
+  /* recent runs */
+  const recent = readRecent();
+  const body = $("recentBody");
+  body.textContent = "";
+  $("clearRecent").hidden = recent.length === 0;
+
+  if (!recent.length) {
+    const empty = el("div", "recent-empty");
+    empty.appendChild(el("strong", null, "No runs yet"));
+    empty.appendChild(el("span", null, "Each extraction is logged here, on this device."));
+    body.appendChild(empty);
+    return;
+  }
+  const table = el("table", "recent-tbl");
+  recent.slice(0, 6).forEach((run) => {
+    const tr = el("tr");
+    tr.appendChild(el("td", "c-niche", run.niche || "—"));
+    tr.appendChild(el("td", "c-count", `${run.kept}/${run.requested}`));
+    tr.appendChild(el("td", "c-count", run.model || ""));
+    tr.appendChild(el("td", "c-when", run.at || ""));
+    table.appendChild(tr);
+  });
+  body.appendChild(table);
+}
+
+function readRecent() {
+  try {
+    const list = JSON.parse(localStorage.getItem("saa_recent") || "[]");
+    return Array.isArray(list) ? list : [];
+  } catch { return []; }
 }
 
 /* ── panes ───────────────────────────────────────────── */
 const PANES = ["emptyPane", "progressPane", "errorPane", "resultsPane"];
-
-function showPane(id) {
-  PANES.forEach((p) => { $(p).hidden = p !== id; });
-}
-
-function renderEmpty() {
-  let last = null;
-  try { last = JSON.parse(localStorage.getItem("saa_last") || "null"); } catch { last = null; }
-
-  $("emptyTitle").textContent = last ? "Last session" : "No session";
-  $("emptyNote").textContent = last
-    ? "Start a new extraction from the sidebar."
-    : "Paste a YouTube URL to fetch captions and run an extraction.";
-
-  const table = $("metaTable");
-  table.textContent = "";
-  if (!last) { table.hidden = true; return; }
-  [
-    ["Niche", last.niche],
-    ["Kept", `${last.clips} of ${last.requested} requested`],
-    ["Rejected", String(last.rejected)],
-    ["Model", last.model],
-    ["Source", last.source],
-    ["When", last.at],
-  ].forEach(([k, v]) => {
-    if (!v) return;
-    const tr = el("tr");
-    tr.appendChild(el("td", null, k));
-    tr.appendChild(el("td", null, v));
-    table.appendChild(tr);
-  });
-  table.hidden = false;
-}
+const showPane = (id) => PANES.forEach((p) => { $(p).hidden = p !== id; });
 
 function renderError(title, message, detail) {
   showPane("errorPane");
   const pane = $("errorPane");
   pane.textContent = "";
 
-  const wrap = el("div", "err-wrap bad");
+  const wrap = el("div", "err bad");
   const head = el("div", "err-head");
-  head.appendChild(el("div", "ico", "!"));
+  const ico = el("div", "ico");
+  ico.appendChild(icon("alert"));
+  head.appendChild(ico);
   head.appendChild(el("h1", null, title));
   wrap.appendChild(head);
   wrap.appendChild(el("p", "err-msg", message));
   if (detail) wrap.appendChild(el("div", "err-hint", detail));
 
-  const actions = el("div");
-  actions.style.display = "flex";
-  actions.style.gap = "7px";
-  const back = el("button", "btn small", "Back");
-  back.onclick = () => showPane("emptyPane");
-  actions.appendChild(back);
-  wrap.appendChild(actions);
+  const back = el("button", "btn tiny", "Back");
+  back.onclick = () => { showPane("emptyPane"); renderDashboard(); };
+  const row = el("div");
+  row.style.display = "flex";
+  row.appendChild(back);
+  wrap.appendChild(row);
 
   pane.appendChild(wrap);
   status("Failed", title);
-}
-
-function renderFatal(title, message, detail) {
-  renderError(title, message, detail);
-  $("runBtn").disabled = true;
 }
 
 /* ── extraction ──────────────────────────────────────── */
@@ -369,7 +489,7 @@ function readPayload() {
     custom_max_sec: custom ? (parseInt($("customMax").value, 10) || null) : null,
     model: $("modelSel").value,
     cascade: $("cascadeToggle").checked,
-    already_extracted: $("alreadyExtracted").value.trim(),
+    already_extracted: "",
     api_key: $("apiKey").value.trim(),
   };
 }
@@ -377,14 +497,14 @@ function readPayload() {
 async function run() {
   const payload = readPayload();
   if (!payload.youtube_url && !payload.transcript_text) {
-    hint($("sourceState"), "Paste a URL or load a transcript first.", "bad");
+    note($("sourceState"), "Paste a URL or load a transcript first.", "bad");
     $("ytUrl").focus();
     return;
   }
 
-  STATE.payload = payload;
-  STATE.result = null;
-  STATE.jobId = null;
+  S.payload = payload;
+  S.result = null;
+  S.jobId = null;
   $("runBtn").disabled = true;
   showPane("progressPane");
   $("stageLog").textContent = "";
@@ -395,7 +515,7 @@ async function run() {
 
   try {
     const { job_id } = await api("/api/extract", { method: "POST", body: JSON.stringify(payload) });
-    STATE.jobId = job_id;
+    S.jobId = job_id;
     pollJob(job_id);
   } catch (e) {
     $("runBtn").disabled = false;
@@ -404,15 +524,15 @@ async function run() {
 }
 
 function pollJob(jobId) {
-  clearInterval(STATE.timers.poll);
-  let lastPct = -1;
+  clearInterval(S.timers.poll);
+  let last = -1;
 
-  STATE.timers.poll = setInterval(async () => {
+  S.timers.poll = setInterval(async () => {
     let job;
     try {
       job = await api(`/api/jobs/${jobId}`);
     } catch (e) {
-      clearInterval(STATE.timers.poll);
+      clearInterval(S.timers.poll);
       $("runBtn").disabled = false;
       renderError("Lost contact with the server", e.message);
       return;
@@ -424,25 +544,25 @@ function pollJob(jobId) {
     $("stageText").textContent = job.stage || "Working";
     $("statusElapsed").textContent = job.elapsed_s ? `${job.elapsed_s}s` : "";
 
-    if (pct !== lastPct) {
-      lastPct = pct;
+    if (pct !== last) {
+      last = pct;
       $("stageLog").textContent += `${String(pct).padStart(3, " ")}%  ${job.stage}\n`;
       $("stageLog").scrollTop = $("stageLog").scrollHeight;
     }
 
     if (job.status === "done") {
-      clearInterval(STATE.timers.poll);
+      clearInterval(S.timers.poll);
       $("runBtn").disabled = false;
       try {
         const result = await api(`/api/jobs/${jobId}/results`);
-        STATE.result = result;
-        renderResults(result, STATE.payload, job);
-        saveLast(result, STATE.payload);
+        S.result = result;
+        renderResults(result, S.payload, job);
+        saveRun(result, S.payload);
       } catch (e) {
         renderError("Results unreadable", e.message, "The job finished but the payload failed to render.");
       }
     } else if (job.status === "error") {
-      clearInterval(STATE.timers.poll);
+      clearInterval(S.timers.poll);
       $("runBtn").disabled = false;
       renderError(titleFor(job.error), job.error || "Unknown error", job.error_hint);
     }
@@ -465,7 +585,7 @@ function renderResults(data, payload, job) {
 
   const clips = data.clips || [];
   const rejected = data.dropped || [];
-  STATE.selected = 0;
+  S.selected = 0;
 
   $("resTitle").textContent = data.video_title || "Transcript session";
   $("resMeta").textContent = [
@@ -477,35 +597,32 @@ function renderResults(data, payload, job) {
     job && job.elapsed_s ? `${job.elapsed_s}s` : "",
   ].filter(Boolean).join("  ·  ");
 
-  const candidates = (data.sweep && data.sweep.longlist) || (data.longlist || []).length;
-  $("statCandidates").textContent = candidates;
+  $("statCandidates").textContent = (data.sweep && data.sweep.longlist) || (data.longlist || []).length;
   $("statKept").textContent = clips.length;
   $("statRejected").textContent = rejected.length;
   $("statRequested").textContent = payload.num_clips;
   $("tabClipsN").textContent = clips.length;
   $("tabRejectedN").textContent = rejected.length;
 
-  /* clip table */
   const rows = $("clipRows");
   rows.textContent = "";
   clips.forEach((clip, index) => {
     const tr = el("tr");
     tr.setAttribute("aria-selected", index === 0 ? "true" : "false");
     tr.appendChild(el("td", "c-n", clip.n));
-    tr.appendChild(el("td", "c-time", clip.start_stamp || hms(clip.start_sec)));
-    tr.appendChild(el("td", "c-time", clip.end_stamp || hms(clip.end_sec)));
-    tr.appendChild(el("td", "c-dur", clip.duration_str || ""));
-    const avgCell = el("td", "c-avg");
+    tr.appendChild(el("td", "c-t", clip.start_stamp || hms(clip.start_sec)));
+    tr.appendChild(el("td", "c-t", clip.end_stamp || hms(clip.end_sec)));
+    tr.appendChild(el("td", "c-d", clip.duration_str || ""));
+    const scoreCell = el("td", "c-s");
     const avg = clip.scores && clip.scores.avg;
-    avgCell.appendChild(el("span", "avg-pill" + (avg >= 8 ? " hi" : ""), avg == null ? "—" : avg));
-    tr.appendChild(avgCell);
-    tr.appendChild(el("td", "c-hook", clip.hook_summary || ""));
+    scoreCell.appendChild(el("span", "score" + (avg >= 8 ? " hi" : ""), avg == null ? "—" : avg));
+    tr.appendChild(scoreCell);
+    tr.appendChild(el("td", "hook", clip.hook_summary || ""));
     tr.onclick = () => selectClip(index);
     rows.appendChild(tr);
   });
   $("clipsEmpty").hidden = clips.length > 0;
 
-  /* rejected */
   const list = $("rejectedList");
   list.textContent = "";
   rejected.forEach((item) => {
@@ -525,9 +642,9 @@ function renderResults(data, payload, job) {
 }
 
 function selectClip(index) {
-  const clips = (STATE.result && STATE.result.clips) || [];
+  const clips = (S.result && S.result.clips) || [];
   const clip = clips[index];
-  STATE.selected = index;
+  S.selected = index;
 
   Array.from($("clipRows").children).forEach((tr, i) => {
     tr.setAttribute("aria-selected", i === index ? "true" : "false");
@@ -541,7 +658,7 @@ function selectClip(index) {
   const body = $("inspBody");
   body.textContent = "";
   if (!clip) {
-    body.appendChild(el("p", "hint", "Select a clip to inspect it."));
+    body.appendChild(el("p", "note pad", "Select a clip."));
     return;
   }
 
@@ -550,11 +667,10 @@ function selectClip(index) {
     if (v == null) return;
     scores.appendChild(el("span", k === "avg" ? "hi" : "", `${k} ${v}`));
   });
-  if (scores.children.length) body.appendChild(field("scores", scores, true));
+  if (scores.children.length) body.appendChild(row("scores", scores, true));
 
   const t = clip.titles || {};
-  const rows = [
-    ["hook", clip.hook_summary, false, clip.hook_summary],
+  [
     ["opens", `[${clip.start_stamp}] ${clip.start_sentence}`, true, clip.start_sentence],
     ["ends", `[${clip.end_stamp}] ${clip.end_sentence}`, true, clip.end_sentence],
     ["length", `${clip.duration_str || ""}${clip.duration_line ? " · " + clip.duration_line : ""}`],
@@ -562,7 +678,6 @@ function selectClip(index) {
     ["search", t.search, false, t.search],
     ["debate", t.debate, false, t.debate],
     ["verbal hook", clip.verbal_hook, false, clip.verbal_hook],
-    ["ending", clip.ending],
     ["why", clip.why_it_works],
     ["share", clip.share_trigger],
     ["overlays", (clip.overlays || []).map((o) => `${o.offset}  ${o.text}`).join("\n"), true],
@@ -572,23 +687,22 @@ function selectClip(index) {
     ["hashtags", clip.hashtags, true, clip.hashtags],
     ["pinned", clip.pinned_comment, false, clip.pinned_comment],
     ["safety", clip.safety && String(clip.safety).toLowerCase() !== "none" ? clip.safety : ""],
-  ];
-  rows.forEach(([k, v, mono, copyText]) => {
-    const node = field(k, v, mono, copyText);
+  ].forEach(([k, v, mono, copyText]) => {
+    const node = row(k, v, mono, copyText);
     if (node) body.appendChild(node);
   });
 }
 
-function field(key, value, mono, copyText) {
+function row(key, value, mono, copyText) {
   if (value === undefined || value === null || value === "") return null;
-  const row = el("div", "irow");
-  row.appendChild(el("div", "k", key));
+  const line = el("div", "irow");
+  line.appendChild(el("div", "k", key));
 
   if (value instanceof Node) {
     const cell = el("div", "v");
     cell.appendChild(value);
-    row.appendChild(cell);
-    return row;
+    line.appendChild(cell);
+    return line;
   }
 
   const cell = el("div", "v" + (mono ? " mono" : ""));
@@ -599,12 +713,12 @@ function field(key, value, mono, copyText) {
     btn.dataset.copy = copyText;
     cell.appendChild(btn);
   }
-  row.appendChild(cell);
-  return row;
+  line.appendChild(cell);
+  return line;
 }
 
 function setView(view) {
-  STATE.view = view;
+  S.view = view;
   $("viewClips").hidden = view !== "clips";
   $("viewRejected").hidden = view !== "rejected";
   $("viewRaw").hidden = view !== "raw";
@@ -616,101 +730,101 @@ function setView(view) {
 /* ── export / cut ────────────────────────────────────── */
 function setupExport(data) {
   const clips = data.clips || [];
-  const canCut = STATE.tools.can_cut && data.video_id && clips.length;
+  const canCut = S.tools.can_cut && data.video_id && clips.length;
   $("cutBtn").disabled = !canCut;
   $("fileList").textContent = "";
   $("cutFill").style.width = "0%";
   $("exportQuality").textContent = "";
+  const sel = $("qualitySel");
 
-  if (!STATE.tools.can_cut) {
-    hint($("cutState"), "Needs ffmpeg and yt-dlp on PATH.", "warn");
-    $("qualitySel").textContent = "";
-    $("qualitySel").appendChild(new Option("unavailable", ""));
+  if (!S.tools.can_cut) {
+    note($("cutState"), "ffmpeg / yt-dlp not found.", "warn");
+    sel.textContent = "";
+    sel.appendChild(new Option("unavailable", ""));
     return;
   }
   if (!data.video_id) {
-    hint($("cutState"), "Pasted transcript — no source video to cut.", "warn");
-    $("qualitySel").textContent = "";
-    $("qualitySel").appendChild(new Option("n/a", ""));
+    note($("cutState"), "Pasted transcript — no video to cut.", "warn");
+    sel.textContent = "";
+    sel.appendChild(new Option("n/a", ""));
     return;
   }
 
-  const sel = $("qualitySel");
   sel.textContent = "";
   sel.appendChild(new Option("checking…", ""));
   sel.disabled = true;
-  hint($("cutState"), "Reading available qualities…");
+  note($("cutState"), "Reading qualities…");
 
   api(`/api/video-quality/${encodeURIComponent(data.video_id)}`)
     .then((res) => {
       sel.textContent = "";
-      const min = STATE.cfg.min_height || 1080;
+      const min = S.cfg.min_height || 1080;
       const heights = (res.qualities || []).filter((q) => q >= min);
       (heights.length ? heights : [min]).forEach((q) => {
-        sel.appendChild(new Option(q >= 2160 ? `${q}p · 4K` : `${q}p`, String(q)));
+        sel.appendChild(new Option(q >= 2160 ? `${q}p 4K` : `${q}p`, String(q)));
       });
       sel.disabled = false;
-      hint($("cutState"), "Ready.", "ok");
+      note($("cutState"), "Ready.", "ok");
     })
     .catch((e) => {
       sel.textContent = "";
       sel.appendChild(new Option("unavailable", ""));
       sel.disabled = true;
-      hint($("cutState"), e.message + (e.hint ? " — " + e.hint : ""), "warn");
+      note($("cutState"), e.message + (e.hint ? " — " + e.hint : ""), "warn");
     });
 }
 
 async function startCut() {
-  if (!STATE.jobId || !STATE.result || !STATE.tools.can_cut) return;
+  if (!S.jobId || !S.result || !S.tools.can_cut) return;
   const sel = $("qualitySel");
-  const height = sel && sel.value ? parseInt(sel.value, 10) : (STATE.cfg.min_height || 1080);
+  const height = sel && sel.value ? parseInt(sel.value, 10) : (S.cfg.min_height || 1080);
 
   $("cutBtn").disabled = true;
   $("fileList").textContent = "";
   $("cutFill").style.width = "0%";
-  hint($("cutState"), "Downloading source…");
+  note($("cutState"), "Downloading source…");
   status("Cutting", `${height}p`);
 
   try {
-    const { cut_id } = await api(`/api/jobs/${STATE.jobId}/cut`, {
+    const { cut_id } = await api(`/api/jobs/${S.jobId}/cut`, {
       method: "POST",
       body: JSON.stringify({ height }),
     });
     pollCut(cut_id);
   } catch (e) {
     $("cutBtn").disabled = false;
-    hint($("cutState"), [e.message, e.hint].filter(Boolean).join(" — "), "bad");
+    note($("cutState"), [e.message, e.hint].filter(Boolean).join(" — "), "bad");
     status("Cut failed", e.message);
   }
 }
 
 function pollCut(cutId) {
-  clearInterval(STATE.timers.cut);
-  STATE.timers.cut = setInterval(async () => {
+  clearInterval(S.timers.cut);
+  S.timers.cut = setInterval(async () => {
     let cut;
     try {
       cut = await api(`/api/cuts/${cutId}`);
     } catch (e) {
-      clearInterval(STATE.timers.cut);
+      clearInterval(S.timers.cut);
       $("cutBtn").disabled = false;
-      hint($("cutState"), e.message, "bad");
+      note($("cutState"), e.message, "bad");
       return;
     }
 
     $("cutFill").style.width = `${cut.progress || 0}%`;
-    hint($("cutState"), `${cut.progress || 0}% · ${cut.stage}`);
+    note($("cutState"), `${cut.progress || 0}% · ${cut.stage}`);
     $("exportQuality").textContent = cut.quality || "";
 
     if (cut.status === "done") {
-      clearInterval(STATE.timers.cut);
+      clearInterval(S.timers.cut);
       $("cutBtn").disabled = false;
-      hint($("cutState"), `${cut.files.length} file(s) · ${cut.quality || ""}`, "ok");
+      note($("cutState"), `${cut.files.length} file(s) · ${cut.quality || ""}`, "ok");
       renderFiles(cut.files || []);
       status("Cut complete", `${cut.files.length} files`);
     } else if (cut.status === "error") {
-      clearInterval(STATE.timers.cut);
+      clearInterval(S.timers.cut);
       $("cutBtn").disabled = false;
-      hint($("cutState"), cut.error || "Cut failed", "bad");
+      note($("cutState"), cut.error || "Cut failed", "bad");
       status("Cut failed", cut.error || "");
     }
   }, 1200);
@@ -731,17 +845,30 @@ function renderFiles(files) {
   });
 }
 
-/* ── last session ────────────────────────────────────── */
-function saveLast(result, payload) {
+function downloadReport() {
+  if (!S.result) return;
+  const blob = new Blob([S.result.oracle_report || ""], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `clips-${S.result.video_id || "session"}.txt`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  toast("Report downloaded");
+}
+
+/* ── history ─────────────────────────────────────────── */
+function saveRun(result, payload) {
   try {
-    localStorage.setItem("saa_last", JSON.stringify({
+    const list = readRecent();
+    list.unshift({
       at: new Date().toLocaleString(),
       niche: payload.niche,
-      clips: (result.clips || []).length,
+      kept: (result.clips || []).length,
       requested: payload.num_clips,
       rejected: (result.dropped || []).length,
       model: result.model_used || payload.model,
       source: result.transcript_source || "pasted",
-    }));
+    });
+    localStorage.setItem("saa_recent", JSON.stringify(list.slice(0, 12)));
   } catch { /* storage blocked — not essential */ }
 }

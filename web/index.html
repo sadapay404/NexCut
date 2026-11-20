@@ -4,144 +4,187 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Clip Studio — Sheikh Arsalan Automation</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=6">
 </head>
 <body>
 
-<header class="app-header">
+<!-- icon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-captions" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M8 12h3M14 12h2"/></symbol>
+    <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></symbol>
+    <symbol id="i-chip" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></symbol>
+    <symbol id="i-scissors" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M8 8l12 8M8 16L20 8"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5H6a1 1 0 0 0-1 1v9"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v10M8 11l4 4 4-4M4 19h16"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3l9-16z"/><path d="M12 10v4M12 17v.5"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a4 4 0 0 0 6 0l2-2a4 4 0 0 0-6-6l-1 1"/><path d="M14 11a4 4 0 0 0-6 0l-2 2a4 4 0 0 0 6 6l1-1"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 20V9M8 12l4-4 4 4M4 5h16"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14a8 8 0 1 1-9-11 6.5 6.5 0 0 0 9 11z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  </defs>
+</svg>
+
+<header class="topbar">
   <div class="brand">
-    <div class="brand-mark" aria-hidden="true">SAA</div>
-    <div class="brand-name">Sheikh Arsalan Automation</div>
-    <div class="brand-div" aria-hidden="true"></div>
-    <div class="brand-sub">Clip Studio</div>
-  </div>
-  <div class="header-right">
-    <div class="badges">
-      <span class="badge" id="providerBadge"><i class="dot"></i><strong>provider</strong>&nbsp;<span id="providerText">—</span></span>
-      <span class="badge" id="promptBadge"><i class="dot"></i><strong>prompt</strong>&nbsp;<span id="promptText">—</span></span>
-      <span class="badge" id="toolsBadge"><i class="dot"></i><strong>cutting</strong>&nbsp;<span id="toolsText">—</span></span>
+    <div class="brand-mark">SAA</div>
+    <div class="brand-text">
+      <span class="brand-name">Sheikh Arsalan Automation</span>
+      <span class="brand-app">Clip Studio</span>
     </div>
-    <button class="btn small ghost" id="themeBtn" type="button" aria-label="Switch colour theme">Theme</button>
+  </div>
+  <div class="topbar-right">
+    <button class="pill" id="providerBadge" type="button" title="Model provider">
+      <i class="dot"></i><span class="pill-k">provider</span><span class="pill-v" id="providerText">—</span>
+    </button>
+    <button class="pill" id="promptBadge" type="button" title="Prompt source">
+      <i class="dot"></i><span class="pill-k">prompt</span><span class="pill-v" id="promptText">—</span>
+    </button>
+    <button class="pill" id="toolsBadge" type="button" title="ffmpeg / yt-dlp">
+      <i class="dot"></i><span class="pill-k">cutting</span><span class="pill-v" id="toolsText">—</span>
+    </button>
+    <button class="icon-btn" id="themeBtn" type="button" title="Toggle theme" aria-label="Toggle theme">
+      <svg class="ic"><use href="#i-moon"/></svg>
+    </button>
   </div>
 </header>
 
-<div class="app-body">
-
-  <!-- ───────── sidebar ───────── -->
+<div class="shell">
+  <!-- ══════════ sidebar ══════════ -->
   <aside class="sidebar">
     <div class="sidebar-scroll">
 
       <section class="panel">
-        <div class="panel-head"><h2>Source</h2><span class="step">01</span></div>
-        <div class="field">
+        <header class="panel-head"><h2>Source</h2><span class="idx">01</span></header>
+        <div class="ctl">
           <label class="lbl" for="ytUrl">YouTube URL</label>
-          <input id="ytUrl" type="text" inputmode="url" autocomplete="off" spellcheck="false"
-                 placeholder="https://www.youtube.com/watch?v=…">
-          <p class="hint" id="sourceState">No source</p>
+          <div class="input-icon">
+            <svg class="ic"><use href="#i-link"/></svg>
+            <input id="ytUrl" type="text" inputmode="url" autocomplete="off" spellcheck="false"
+                   placeholder="https://youtube.com/watch?v=…">
+          </div>
+          <p class="note" id="sourceState">No source</p>
         </div>
-
         <details class="fold" id="transcriptFold">
-          <summary>
-            <i class="chev" aria-hidden="true"></i>Transcript
-            <span class="meta" id="charBadge">empty</span>
-          </summary>
+          <summary><svg class="ic chev"><use href="#i-chevron"/></svg> Transcript <span class="tag" id="charBadge">empty</span></summary>
           <textarea id="transcript" spellcheck="false"
                     placeholder="00:00:08 - line as spoken&#10;00:00:16 - next line"></textarea>
           <div class="btn-row">
-            <button class="btn small" id="uploadBtn" type="button">Upload file</button>
-            <button class="btn small" id="sampleBtn" type="button">Load sample</button>
+            <button class="btn tiny" id="uploadBtn" type="button"><svg class="ic"><use href="#i-upload"/></svg>Upload</button>
+            <button class="btn tiny" id="sampleBtn" type="button">Sample</button>
           </div>
           <input id="fileInput" type="file" accept=".txt,.srt,.vtt" hidden>
         </details>
       </section>
 
       <section class="panel">
-        <div class="panel-head"><h2>Output</h2><span class="step">02</span></div>
-        <div class="field">
+        <header class="panel-head"><h2>Output</h2><span class="idx">02</span></header>
+        <div class="ctl">
           <label class="lbl" for="nicheSel">Niche</label>
           <select id="nicheSel"></select>
         </div>
-        <div class="field" id="subWrap" hidden>
+        <div class="ctl" id="subWrap" hidden>
           <label class="lbl" for="subSel">Sub-category</label>
           <select id="subSel"></select>
         </div>
-        <div class="field-row">
-          <div class="field">
-            <label class="lbl" for="audienceSel">Audience</label>
-            <select id="audienceSel"></select>
-          </div>
-          <div class="field">
-            <label class="lbl" for="langSel">Language</label>
-            <select id="langSel"></select>
-          </div>
-          <div class="field">
+        <div class="ctl">
+          <label class="lbl" for="audienceSel">Audience</label>
+          <select id="audienceSel"></select>
+        </div>
+        <div class="ctl">
+          <label class="lbl" for="langSel">Language</label>
+          <select id="langSel"></select>
+        </div>
+        <div class="ctl">
+          <label class="lbl" for="windowSel">Length</label>
+          <select id="windowSel"></select>
+        </div>
+        <div class="grid3">
+          <div class="ctl">
             <label class="lbl" for="numClips">Clips</label>
             <input id="numClips" type="number" min="1" max="12" step="1" value="5">
           </div>
-          <div class="field">
-            <label class="lbl" for="windowSel">Length</label>
-            <select id="windowSel"></select>
-          </div>
-          <div class="field" id="customMinWrap" hidden>
+          <div class="ctl" id="customMinWrap" hidden>
             <label class="lbl" for="customMin">Min s</label>
             <input id="customMin" type="number" min="10" value="45">
           </div>
-          <div class="field" id="customMaxWrap" hidden>
+          <div class="ctl" id="customMaxWrap" hidden>
             <label class="lbl" for="customMax">Max s</label>
             <input id="customMax" type="number" min="15" value="90">
           </div>
         </div>
-        <div class="field">
-          <label class="lbl" for="alreadyExtracted">Exclude</label>
-          <input id="alreadyExtracted" type="text" autocomplete="off"
-                 placeholder="published hooks or timestamps">
-        </div>
       </section>
 
       <section class="panel">
-        <div class="panel-head"><h2>Model</h2><span class="step">03</span></div>
-        <div class="field">
+        <header class="panel-head"><h2>Model</h2><span class="idx">03</span></header>
+        <div class="ctl">
           <label class="lbl" for="modelSel">Model</label>
           <select id="modelSel"></select>
         </div>
-        <div class="field">
+        <div class="ctl">
           <label class="lbl" for="apiKey">API key</label>
-          <div class="inline">
-            <input id="apiKey" type="password" autocomplete="off" placeholder="key">
-            <button class="btn small" id="showKey" type="button">Show</button>
+          <div class="input-inline">
+            <input id="apiKey" type="password" autocomplete="off" placeholder="paste key">
+            <button class="btn tiny" id="showKey" type="button">Show</button>
           </div>
         </div>
-        <label class="check"><input id="rememberKey" type="checkbox">Remember on this device</label>
-        <label class="check"><input id="cascadeToggle" type="checkbox" checked>Fall back across models</label>
-        <p class="hint" id="providerNote"></p>
+        <div class="checks">
+          <label class="check"><input id="rememberKey" type="checkbox">Remember</label>
+          <label class="check"><input id="cascadeToggle" type="checkbox" checked>Fallback</label>
+        </div>
+        <p class="note" id="providerNote"></p>
       </section>
     </div>
 
-    <div class="sidebar-actions">
+    <div class="sidebar-foot">
       <button class="btn primary block" id="runBtn" type="button">
-        Run extraction <kbd class="kbd">Ctrl ↵</kbd>
+        <svg class="ic"><use href="#i-play"/></svg>
+        <span>Run extraction</span>
+        <kbd>⌘↵</kbd>
       </button>
     </div>
   </aside>
 
-  <!-- ───────── content ───────── -->
+  <!-- ══════════ content ══════════ -->
   <main class="content" id="content">
 
+    <!-- dashboard (idle) -->
     <section class="pane" id="emptyPane">
-      <div class="empty-wrap">
-        <div>
-          <h2 class="empty-title" id="emptyTitle">No session</h2>
-          <p class="empty-note" id="emptyNote">Paste a YouTube URL to fetch captions and run an extraction.</p>
+      <div class="dash">
+        <div class="dash-head">
+          <div class="dash-title">
+            <p class="eyebrow">Session</p>
+            <h1 id="emptyTitle">Ready to extract</h1>
+            <p class="dash-note" id="emptyNote">Paste a YouTube URL — captions are fetched automatically.</p>
+          </div>
+          <div class="dash-config" id="dashConfig"></div>
         </div>
-        <table class="kv-table" id="metaTable" hidden></table>
+
+        <ol class="steps" id="pipeline"></ol>
+
+        <section class="recent">
+          <header class="recent-head">
+            <h2>Recent runs</h2>
+            <button class="btn tiny ghost" id="clearRecent" type="button" hidden>Clear</button>
+          </header>
+          <div id="recentBody"></div>
+        </section>
       </div>
     </section>
 
+    <!-- progress -->
     <section class="pane" id="progressPane" hidden>
-      <div class="prog-wrap">
-        <div class="prog-top">
-          <h1 id="stageText">Queued</h1>
-          <span class="pct" id="pctText">0%</span>
+      <div class="prog">
+        <div class="prog-head">
+          <div>
+            <p class="eyebrow">Running</p>
+            <h1 id="stageText">Queued</h1>
+          </div>
+          <span class="prog-pct" id="pctText">0%</span>
         </div>
         <div class="bar"><i id="barFill"></i></div>
         <pre class="log" id="stageLog" aria-live="polite"></pre>
@@ -150,108 +193,94 @@
 
     <section class="pane" id="errorPane" hidden></section>
 
+    <!-- results -->
     <section id="resultsPane" class="res" hidden>
-      <div class="res-top">
-        <div class="res-title">
+      <header class="res-head">
+        <div class="res-id">
+          <p class="eyebrow">Result</p>
           <h1 id="resTitle">—</h1>
-          <div class="res-meta" id="resMeta"></div>
+          <p class="res-meta" id="resMeta"></p>
         </div>
-        <div class="res-tools">
-          <button class="btn small" id="copyJsonBtn" type="button">Copy response</button>
-          <button class="btn small" id="downloadBtn" type="button">Download</button>
-          <button class="btn small ghost" id="newRunBtn" type="button">New run</button>
+        <div class="res-actions">
+          <button class="btn tiny" id="copyJsonBtn" type="button"><svg class="ic"><use href="#i-copy"/></svg>Response</button>
+          <button class="btn tiny" id="downloadBtn" type="button"><svg class="ic"><use href="#i-download"/></svg>Report</button>
+          <button class="btn tiny ghost" id="newRunBtn" type="button">New run</button>
         </div>
+      </header>
+
+      <div class="res-stats">
+        <div class="stat"><b id="statCandidates">0</b><span>candidates</span></div>
+        <div class="stat"><b id="statKept">0</b><span>kept</span></div>
+        <div class="stat"><b id="statRejected">0</b><span>rejected</span></div>
+        <div class="stat"><b id="statRequested">0</b><span>requested</span></div>
       </div>
 
-      <div class="stats">
-        <div class="stat"><b id="statCandidates">0</b><span>Candidates</span></div>
-        <div class="stat"><b id="statKept">0</b><span>Kept</span></div>
-        <div class="stat"><b id="statRejected">0</b><span>Rejected</span></div>
-        <div class="stat"><b id="statRequested">0</b><span>Requested</span></div>
-      </div>
-
-      <div class="res-body">
+      <div class="res-split">
         <div class="res-left">
-          <div class="seg" id="segTabs" role="tablist" style="margin:12px 20px">
-            <button role="tab" data-view="clips" aria-selected="true" type="button">
-              Clips<span class="n" id="tabClipsN">0</span>
-            </button>
-            <button role="tab" data-view="rejected" aria-selected="false" type="button">
-              Rejected<span class="n" id="tabRejectedN">0</span>
-            </button>
-            <button role="tab" data-view="raw" aria-selected="false" type="button">
-              Response
-            </button>
+          <div class="tabs" id="segTabs" role="tablist">
+            <button role="tab" data-view="clips" aria-selected="true" type="button">Clips<span id="tabClipsN">0</span></button>
+            <button role="tab" data-view="rejected" aria-selected="false" type="button">Rejected<span id="tabRejectedN">0</span></button>
+            <button role="tab" data-view="raw" aria-selected="false" type="button">Response</button>
           </div>
 
-          <div id="viewClips">
+          <div id="viewClips" class="view">
             <table class="grid">
-              <thead>
-                <tr>
-                  <th class="c-n">#</th>
-                  <th class="c-time">Start</th>
-                  <th class="c-time">End</th>
-                  <th class="c-dur">Length</th>
-                  <th class="c-avg">Score</th>
-                  <th class="c-hook">Hook</th>
-                </tr>
-              </thead>
+              <thead><tr>
+                <th class="c-n">#</th><th class="c-t">Start</th><th class="c-t">End</th>
+                <th class="c-d">Length</th><th class="c-s">Score</th><th>Hook</th>
+              </tr></thead>
               <tbody id="clipRows"></tbody>
             </table>
-            <p class="hint" id="clipsEmpty" style="padding:0 20px" hidden>No clip passed the rule check.</p>
+            <p class="note pad" id="clipsEmpty" hidden>No clip passed the rule check.</p>
           </div>
 
-          <div id="viewRejected" class="plain-view" hidden>
-            <ul class="rej-list" id="rejectedList"></ul>
-            <p class="hint" id="rejectedEmpty" hidden>No rejections.</p>
+          <div id="viewRejected" class="view" hidden>
+            <ul class="rejects" id="rejectedList"></ul>
+            <p class="note pad" id="rejectedEmpty" hidden>Nothing rejected.</p>
           </div>
 
-          <div id="viewRaw" hidden>
+          <div id="viewRaw" class="view" hidden>
             <pre class="raw" id="rawAnswer"></pre>
           </div>
         </div>
 
-        <div class="res-right">
-          <div class="insp-head">
+        <aside class="inspector">
+          <header class="insp-head">
             <h2 id="inspTitle">No clip selected</h2>
             <span class="mono" id="inspTime"></span>
-          </div>
+          </header>
           <div class="insp-body" id="inspBody"></div>
 
           <div class="export">
             <div class="export-head">
-              <h3>Export MP4</h3>
+              <h3><svg class="ic"><use href="#i-scissors"/></svg> Export</h3>
               <span class="mono" id="exportQuality"></span>
             </div>
             <div class="export-row">
               <select id="qualitySel" aria-label="Export quality"></select>
-              <button class="btn small" id="cutBtn" type="button" disabled>Cut clips</button>
+              <button class="btn tiny primary" id="cutBtn" type="button" disabled>Cut</button>
             </div>
-            <div class="cutbar"><i id="cutFill"></i></div>
-            <p class="hint" id="cutState">—</p>
+            <div class="bar thin"><i id="cutFill"></i></div>
+            <p class="note" id="cutState">—</p>
             <ul class="files" id="fileList"></ul>
           </div>
-        </div>
+        </aside>
       </div>
     </section>
   </main>
 </div>
 
 <footer class="statusbar">
-  <div class="left">
-    <span id="statusText">Ready</span>
-    <span class="sep" aria-hidden="true"></span>
-    <span id="statusHint"></span>
-  </div>
-  <div class="right">
-    <span id="statusProvider"></span>
-    <span id="statusElapsed"></span>
-    <span id="statusVersion"></span>
-  </div>
+  <span class="sb-main" id="statusText">Ready</span>
+  <span class="sb-sep"></span>
+  <span class="sb-dim" id="statusHint"></span>
+  <span class="sb-grow"></span>
+  <span class="sb-dim" id="statusProvider"></span>
+  <span class="sb-dim" id="statusElapsed"></span>
+  <span class="sb-dim" id="statusVersion"></span>
 </footer>
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
-
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=6"></script>
 </body>
 </html>

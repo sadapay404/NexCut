@@ -109,6 +109,9 @@ function makeFetch(log) {
     "prompt chip": $("promptText").textContent.trim(),
     "tools chip": $("toolsText").textContent.trim(),
     "empty title": $("emptyTitle").textContent.trim(),
+    "pipeline steps": window.document.querySelectorAll("#pipeline li").length,
+    "config chips": window.document.querySelectorAll("#dashConfig .chip").length,
+    "window label short": !/Option/.test($("windowSel").options[0].textContent),
   };
 
   // drive a full run: URL -> captions -> extract -> results -> cut
@@ -139,17 +142,25 @@ function makeFetch(log) {
   window.document.querySelector('#segTabs button[data-view="clips"]').click();
   }
 
+  // dashboard history after a run
+  $("newRunBtn").click();
+  await new Promise((r) => setTimeout(r, 30));
+  checks["recent rows"] = window.document.querySelectorAll("#recentBody tr").length;
+  checks["back to dashboard"] = !$("emptyPane").hidden;
+
   console.log("── checks");
   Object.entries(checks).forEach(([k, v]) => console.log(`   ${k.padEnd(22)} ${v}`));
 
+  const mustBeNonZero = ["pipeline steps", "config chips", "recent rows", "result rows", "detail rows", "file links"];
   const bad = Object.entries(checks).filter(([k, v]) =>
-    (k.endsWith("options") || k === "result rows" || k === "detail rows") ? !v : false);
+    (k.endsWith("options") || mustBeNonZero.includes(k)) ? !v : false);
+  const misnamed = Object.entries(checks).filter(([k, v]) => k === "window label short" && !v);
 
   if (errors.length) {
     console.log("\n── errors");
     errors.forEach((e) => console.log("   " + e.split("\n")[0]));
   }
-  if (bad.length || errors.length) {
+  if (bad.length || misnamed.length || errors.length) {
     console.log("\nFAIL");
     process.exit(1);
   }

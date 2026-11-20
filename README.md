@@ -53,15 +53,20 @@ settings. See `prompts/README.md`; start from `prompts/master.example.md`.
 | `nexcut/cutter.py` | yt-dlp download + ffmpeg frame-accurate cut, tool probing |
 | `nexcut/cuts.py` | cut job queue: one download, then per-clip progress |
 | `nexcut/server.py` | HTTP layer (stdlib), contract-shaped routes |
-| `web/` | the studio UI — vinyl sleeve theme, no framework |
+| `web/` | the studio UI — grid shell, dense sidebar, dashboard, results split view; no framework, no build step |
 | `tools/parity.py` | gate any recorded model answer and see what survives |
 | `docs/` | recon, contract, build notes, handover |
 
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests -v      # 93 tests
+python3 -m unittest discover -s tests -v      # 93 backend/contract tests
+npm install && npm run test:ui                # 20 UI assertions (jsdom, no browser)
 ```
+
+The UI harness boots `web/index.html` + `web/app.js` against a stubbed API and
+fails on any exception, any `console.error`, or any empty critical node. It does
+not do layout — see `docs/ui-plan.md` for what that means.
 
 ## API
 
