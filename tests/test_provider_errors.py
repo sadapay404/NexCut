@@ -52,6 +52,14 @@ class PostErrorPaths(unittest.TestCase):
             self.attempt_with(http_error(400, '{"error":{"message":"API key not valid"}}'))
         self.assertIn("API key not valid", str(ctx.exception))
 
+    def test_bad_model_name_gets_a_list_hint(self):
+        with mock.patch("urllib.request.urlopen", side_effect=http_error(
+            400, '{"error":{"message":"* GenerateContentRequest.model: unexpected model name format"}}')
+        ):
+            with self.assertRaises(providers.ProviderError) as ctx:
+                providers.GeminiProvider("k", timeout=5)._attempt("x", "s", "u", "k")
+        self.assertIn("--list", ctx.exception.hint)
+
     def test_every_path_raises_provider_error_not_nameerror(self):
         for code in (400, 401, 403, 404, 429, 500, 502, 503, 504):
             with self.subTest(code=code):
@@ -81,11 +89,3 @@ class HealthCheckReportsRealErrors(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-    def test_bad_model_name_gets_a_list_hint(self):
-        with mock.patch("urllib.request.urlopen", side_effect=http_error(
-            400, '{"error":{"message":"* GenerateContentRequest.model: unexpected model name format"}}')
-        ):
-            with self.assertRaises(providers.ProviderError) as ctx:
-                providers.GeminiProvider("k", timeout=5)._attempt("x", "s", "u", "k")
-        self.assertIn("--list", ctx.exception.hint)
