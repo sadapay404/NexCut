@@ -61,6 +61,34 @@ def provider_label() -> str:
     return (os.environ.get("NEXCUT_PROVIDER") or "stub").strip().lower()
 
 
+# Cloudflare-fronted APIs (Groq among them) reject the stdlib default
+# "Python-urllib/3.x" signature with error 1010.
+DEFAULT_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/126.0.0.0 Safari/537.36")
+
+
+def user_agent() -> str:
+    return (os.environ.get("NEXCUT_USER_AGENT") or DEFAULT_UA).strip()
+
+
+def is_edge_block(detail: str) -> bool:
+    """Cloudflare/WAF refusal: about the client signature, not the key."""
+    low = (detail or "").lower()
+    return ("error code: 1010" in low or "cloudflare" in low
+            or "just a moment" in low or "<html" in low)
+
+
+def provider_env_hint() -> str:
+    if provider_label() == "groq":
+        return ("Check the key at console.groq.com -> API Keys, then restart the "
+                "server so .env is re-read.")
+    if provider_label() == "openai":
+        return ("Check the key at platform.openai.com -> API keys, then restart the "
+                "server so .env is re-read.")
+    return ("Check the key in AI Studio and that the Generative Language API is "
+            "enabled, then restart the server so .env is re-read.")
+
+
 def request_timeout() -> int:
     try:
         return max(10, int(os.environ.get("NEXCUT_TIMEOUT", "180")))
@@ -143,7 +171,8 @@ class _HttpProvider:
     def _post(self, url: str, body: dict, headers: dict, *, label: str = "the model") -> dict:
         req = urllib.request.Request(
             url, data=json.dumps(body).encode(), method="POST",
-            headers={"Content-Type": "application/json", **headers},
+            headers={"Content-Type": "application/json", "Accept": "application/json",
+                     "User-Agent": user_agent(), **headers},
         )
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as r:
@@ -163,8 +192,17 @@ class _HttpProvider:
                     retryable=True, hint=hint,
                 ) from exc
             if exc.code in (401, 403):
+                if is_edge_block(detail):
+                    raise ProviderError(
+                        "The provider's edge refused this client "
+                        f"(HTTP {exc.code}, Cloudflare) — that is the network "
+                        "signature, not your key.",
+                        hint="Set NEXCUT_USER_AGENT to your browser's user agent, "
+                             "or run from a network the API does not block.",
+                    ) from exc
                 raise ProviderError(
-                    "That API key was rejected. Check it was copied fully and is enabled."
+                    "That API key was rejected. Check it was copied fully and is enabled.",
+                    hint=provider_env_hint(),
                 ) from exc
             if exc.code == 404:
                 raise ProviderError(

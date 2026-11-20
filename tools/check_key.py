@@ -84,8 +84,22 @@ def configured_model() -> str:
 
 
 # ── http ──────────────────────────────────────────────────────────────
+DEFAULT_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/126.0.0.0 Safari/537.36")
+
+
+def _headers(extra: dict[str, str]) -> dict[str, str]:
+    return {"Accept": "application/json", "User-Agent": DEFAULT_UA, **extra}
+
+
+def is_edge_block(detail: str) -> bool:
+    low = (detail or "").lower()
+    return ("error code: 1010" in low or "cloudflare" in low
+            or "just a moment" in low or "<html" in low)
+
+
 def _get(url: str, headers: dict[str, str]) -> dict:
-    req = urllib.request.Request(url, headers=headers)
+    req = urllib.request.Request(url, headers=_headers(headers))
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.loads(r.read().decode() or "{}")
 
@@ -93,7 +107,7 @@ def _get(url: str, headers: dict[str, str]) -> dict:
 def _post(url: str, body: dict, headers: dict) -> dict:
     req = urllib.request.Request(
         url, data=json.dumps(body).encode(), method="POST",
-        headers={"Content-Type": "application/json", **headers},
+        headers=_headers({"Content-Type": "application/json", **headers}),
     )
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.loads(r.read().decode() or "{}")
@@ -193,7 +207,13 @@ def main(argv: list[str]) -> int:
         if suggestion and suggestion != model:
             print("\nGoogle names a replacement — try:")
             print(f"  python3 tools/check_key.py {suggestion}")
-        if exc.code in (401, 403):
+        if is_edge_block(detail):
+            print("\nCloudflare refused this client (error 1010) — that is the network "
+                  "signature, not the key. Set NEXCUT_USER_AGENT to a browser UA, or "
+                  "send the request from a different network.")
+            print("Already carrying a browser UA in the app — if this is the tool only, "
+                  "the app may still work.")
+        elif exc.code in (401, 403):
             print("\nThe key itself was refused: re-copy it, check it is enabled for "
                   "this provider, and restart the server after editing .env.")
         if exc.code == 404 and kind in ("groq", "openai"):
