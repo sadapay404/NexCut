@@ -54,6 +54,8 @@ const RESULTS = {
   }],
 };
 
+let failTranscript = false;   // toggled by the failure-path test below
+
 function makeFetch(log) {
   return async (url, opts = {}) => {
     const u = String(url);
@@ -65,7 +67,10 @@ function makeFetch(log) {
       headers: { get: () => "application/json" },
     });
     if (u.includes("/api/config")) return json(CONFIG);
-    if (u.includes("/api/transcript")) return json(TRANSCRIPT);
+    if (u.includes("/api/transcript")) {
+      if (failTranscript) return json({ detail: "NO CAPTIONS", hint: "Paste a transcript instead." }, 502);
+      return json(TRANSCRIPT);
+    }
     if (u.includes("/api/extract")) return json({ job_id: "job1" });
     if (u.match(/\/api\/jobs\/[^/]+\/results/)) return json(RESULTS);
     if (u.match(/\/api\/jobs\/[^/]+$/)) return json({
@@ -171,6 +176,20 @@ function makeFetch(log) {
   $("zipToggle").checked = false;
   $("zipToggle").dispatchEvent(new window.Event("change"));
 
+  // caption failure must not dead-end: Details opens with the drawer ready
+  $("newRunBtn").click();
+  await new Promise((r) => setTimeout(r, 30));
+  failTranscript = true;
+  $("ytUrl").value = "https://www.youtube.com/watch?v=blocked0001";
+  $("ytUrl").dispatchEvent(new window.Event("input"));
+  await new Promise((r) => setTimeout(r, 900));
+  checks["failed fetch still opens details"] = !$("setupPane").hidden;
+  checks["failed fetch badge"] = $("detailBadge").textContent.trim();
+  checks["failed fetch drawer"] = !$("ownTranscriptBox").hidden;
+  failTranscript = false;
+  $("newRunBtn").click();
+  await new Promise((r) => setTimeout(r, 30));
+
   // downloader tab
   sel('#modeTabs button[data-mode="downloader"]').click();
   checks["downloader pane"] = !$("downloaderPane").hidden && $("cutterPane").hidden;
@@ -191,9 +210,10 @@ function makeFetch(log) {
     "own transcript open", "own transcript closed", "results visible", "more panel",
     "thumbnail text", "zip button visible", "row downloads hidden", "downloader pane",
     "back to cutter", "credits in footer", "back to landing", "credits under the bar",
+    "failed fetch still opens details", "failed fetch drawer",
   ];
   const mustBeNonZero = ["length presets", "clip rows", "download links", "packaging fields"];
-  const expected = { "clips min": "5", "clips max": "15", "default length": "40-50",
+  const expected = { "failed fetch badge": "no captions", "clips min": "5", "clips max": "15", "default length": "40-50",
     "clip badge auto": "AUTO", "clip badge manual": "7 clips", "asked": "7",
     "zip href": "/api/cuts/cut1/zip" };
 

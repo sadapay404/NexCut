@@ -286,9 +286,29 @@ async function loadLink(url, force) {
     note($("sourceState"), `Captions ready — ${data.lines} lines`, "ok");
     showPane("setupPane");
   } catch (e) {
+    // captions are optional: land on Details anyway so the run can continue
+    // with a pasted transcript instead of dead-ending on the landing screen
     S.details = null;
+    fillDetailsEmpty(e);
     note($("sourceState"), [e.message, e.hint].filter(Boolean).join(" "), "bad");
+    $("ownTranscriptBox").hidden = false;
+    $("ownTranscript").setAttribute("aria-expanded", "true");
+    note($("ownNote"), [e.message, e.hint].filter(Boolean).join(" "), "bad");
+    showPane("setupPane");
   }
+}
+
+function fillDetailsEmpty(error) {
+  $("factTitle").textContent = "not fetched";
+  $("factChannel").textContent = "—";
+  $("factLength").textContent = "—";
+  $("factCaptions").textContent = "unavailable";
+  $("factTranscript").textContent = "paste your own below";
+  $("factNiche").textContent = "detected by the model on extract";
+  $("detailBadge").textContent = "no captions";
+  $("detailBadge").style.borderColor = "rgba(224,145,137,.4)";
+  $("detailBadge").style.color = "var(--red)";
+  if (error) $("detailBadge").title = error.message || "";
 }
 
 function fillDetails(data) {
@@ -301,6 +321,8 @@ function fillDetails(data) {
     : "—";
   $("factNiche").textContent = "detected by the model on extract";
   $("detailBadge").textContent = data.video_id ? data.video_id : "ready";
+  $("detailBadge").style.borderColor = "";
+  $("detailBadge").style.color = "";
 }
 
 async function uploadFile() {
@@ -355,8 +377,10 @@ async function run() {
     $("ytUrl").focus();
     return;
   }
-  if (payload.youtube_url && !payload.transcript_text) {
-    note($("sourceState"), "Captions are still loading — one moment.", "bad");
+  if (!payload.transcript_text) {
+    note($("ownNote"), "Paste a transcript first, or retry the link.", "bad");
+    $("ownTranscriptBox").hidden = false;
+    $("transcript").focus();
     return;
   }
 

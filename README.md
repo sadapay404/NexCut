@@ -72,7 +72,7 @@ settings. See `prompts/README.md`; start from `prompts/master.example.md`.
 
 ```bash
 python3 -m unittest discover -s tests -v      # 114 backend/contract tests
-npm install && npm run test:ui                # 33 UI assertions (jsdom, no browser)
+npm install && npm run test:ui                # 36 UI assertions (jsdom, no browser)
 ```
 
 The UI harness boots `web/index.html` + `web/app.js` against a stubbed API and
