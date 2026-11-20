@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 import urllib.error
 import urllib.request
@@ -28,7 +29,10 @@ from .schema import WINDOWS, hms
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 OPENAI_ENDPOINT = "{base}/chat/completions"
 
+# Newest first: Google retires ids for accounts that never used them, and a 404
+# now self-heals (see _suggested_model), so this list is a starting point, not law.
 GEMINI_MODELS = [
+    "gemini-3.8-flash",
     "gemini-2.5-flash",
     "gemini-2.5-pro",
     "gemini-2.0-flash",
@@ -40,6 +44,26 @@ TIMEOUT_MSG = "Gemini is slow right now — the request timed out before it answ
 
 def provider_kind() -> str:
     return (os.environ.get("NEXCUT_PROVIDER") or "stub").strip().lower()
+
+
+DEFAULT_GEMINI_MODEL = GEMINI_MODELS[0]
+
+# "…please update your code to use models/gemini-3.8-flash…"
+_SUGGESTION = re.compile(r"use (?:the )?models?/([A-Za-z0-9._\-]+)")
+
+
+def _suggested_model(message: str) -> str:
+    """The replacement id Google names in a retired-model 404, or ''."""
+    found = _SUGGESTION.search(message or "")
+    return found.group(1) if found else ""
+
+
+def default_model() -> str:
+    """NEXCUT_MODEL, else the head of NEXCUT_MODELS, else the catalog head."""
+    explicit = (os.environ.get("NEXCUT_MODEL") or "").strip()
+    if explicit:
+        return explicit
+    return model_catalog()[0]["id"]
 
 
 def model_catalog() -> list[dict[str, str]]:
@@ -133,7 +157,8 @@ class _HttpProvider:
         for key in keys:
             for candidate in order:
                 try:
-                    return self._attempt(candidate, system, user, key), candidate
+                    text = self._attempt(candidate, system, user, key)
+                    return text, getattr(self, "served_model", candidate)
                 except TimeoutError_:
                     raise
                 except ProviderError as exc:
@@ -149,6 +174,15 @@ class GeminiProvider(_HttpProvider):
     name = "gemini"
 
     def _attempt(self, model: str, system: str, user: str, key: str) -> str:
+        try:
+            return self._attempt_once(model, system, user, key)
+        except ProviderError as exc:
+            replacement = _suggested_model(str(exc))
+            if replacement and replacement != model:
+                return self._attempt_once(replacement, system, user, key)
+            raise
+
+    def _attempt_once(self, model: str, system: str, user: str, key: str) -> str:
         body = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
@@ -160,8 +194,10 @@ class GeminiProvider(_HttpProvider):
         }
         url = GEMINI_ENDPOINT.format(model=resolve_model(model))
         # ?key= for older keys, header for the newer AQ.… AI Studio keys: send both
+        served = resolve_model(model)
         payload = self._post(url + f"?key={key}", body, {"x-goog-api-key": key},
-                             label=resolve_model(model))
+                             label=served)
+        self.served_model = served
         try:
             parts = payload["candidates"][0]["content"]["parts"]
             text = "".join(p.get("text", "") for p in parts)

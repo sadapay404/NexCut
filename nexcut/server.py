@@ -124,18 +124,17 @@ MANAGER = JobManager(_provider_factory)
 CUT_MANAGER = CutManager()
 
 
-DEFAULT_MODEL = "gemini-2.5-flash"
+def _default_model() -> str:
+    from .providers import default_model  # noqa: PLC0415
+    return default_model()
 
 
 def key_status() -> tuple[int, dict]:
     """One tiny model call: proves the key in .env works before a real run."""
     from .providers import ProviderError, make_provider  # noqa: PLC0415
 
-    # same model the runs will use: NEXCUT_MODEL, else the head of NEXCUT_MODELS
-    model = os.environ.get("NEXCUT_MODEL", "").strip()
-    if not model:
-        first = (os.environ.get("NEXCUT_MODELS", "") or "").split(",")[0].strip()
-        model = first or DEFAULT_MODEL
+    # same model the runs will use: NEXCUT_MODEL, else NEXCUT_MODELS, else catalog
+    model = _default_model()
     try:
         provider = make_provider("")
     except Exception as exc:  # noqa: BLE001

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -33,13 +34,37 @@ def read_env(path: Path = ROOT / ".env") -> dict[str, str]:
     return values
 
 
+def shipped_default_model() -> str:
+    """Stay in step with the app instead of repeating a model id here."""
+    sys.path.insert(0, str(ROOT))
+    try:
+        from nexcut.providers import default_model  # noqa: PLC0415
+        return default_model()
+    except Exception:  # noqa: BLE001 - the tool must run standalone
+        return "gemini-3.8-flash"
+
+
+SUGGESTION = re.compile(r"use (?:the )?models?/([A-Za-z0-9._\-]+)")
+
+
+def check_key_suggestion(body: str) -> str:
+    found = SUGGESTION.search(body or "")
+    return found.group(1) if found else ""
+
+
 def main(argv: list[str]) -> int:
     env = read_env()
     key = (env.get("NEXCUT_API_KEY") or os.environ.get("NEXCUT_API_KEY", "")).strip()
-    model = argv[1] if len(argv) > 1 else (
-        (env.get("NEXCUT_MODELS") or os.environ.get("NEXCUT_MODELS", "")).split(",")[0].strip()
-        or "gemini-2.5-flash"
-    )
+    if len(argv) > 1:
+        model = argv[1]
+    else:
+        for name in ("NEXCUT_MODELS", "NEXCUT_MODEL"):
+            value = (env.get(name) or os.environ.get(name, "")).split(",")[0].strip()
+            if value:
+                model = value
+                break
+        else:
+            model = shipped_default_model()
 
     if not key:
         print("No NEXCUT_API_KEY in .env or the environment.")
@@ -66,8 +91,16 @@ def main(argv: list[str]) -> int:
             print(f"reply: {text or '(empty)'}")
             return 0
     except urllib.error.HTTPError as exc:
+        body_text = exc.read().decode()
         print(f"\nHTTP {exc.code}  FAILED")
-        print(exc.read().decode()[:800])
+        print(body_text[:800])
+        suggestion = check_key_suggestion(body_text)
+        if suggestion and suggestion != model:
+            print(f"\nGoogle names a replacement — try:")
+            print(f"  python3 tools/check_key.py {suggestion}")
+        if exc.code in (401, 403):
+            print("\nThe key itself was refused: re-copy it from AI Studio, or enable "
+                  "the Generative Language API for its project.")
         return 1
     except urllib.error.URLError as exc:
         print(f"\nCould not reach Google: {exc.reason}")

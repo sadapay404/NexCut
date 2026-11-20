@@ -19,6 +19,7 @@ from typing import Any, Callable
 from .ingest import IngestError, fetch_transcript
 from .parse import ExtractError, build_result, ensure_timestamps
 from .prompt import format_ranges, plan_sweep
+from .providers import default_model
 from .prompts import compose
 from .schema import MAX_CLIPS, MIN_CLIPS, WINDOWS
 from .validate import apply_rules
@@ -166,7 +167,7 @@ class JobManager:
             provider = self._provider_factory(p.get("api_key") or "")
             answer, model_used = provider.complete(
                 system=system, user=user,
-                model=p.get("model") or "gemini-2.5-flash",
+                model=p.get("model") or default_model(),
                 cascade=bool(p.get("cascade", True)),
                 ctx={
                     "transcript": transcript,
