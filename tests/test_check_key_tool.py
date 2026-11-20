@@ -123,6 +123,22 @@ class ListModelsTests(unittest.TestCase):
         self.assertIn("NEXCUT_MODELS=", out)
 
 
+class CloudflareSpecTests(unittest.TestCase):
+    def test_url_headers_and_result_shape(self):
+        import os
+        from unittest import mock
+        env = {"NEXCUT_PROVIDER": "cloudflare", "NEXCUT_CF_ACCOUNT": "acct9"}
+        with mock.patch.dict(os.environ, env, clear=False):
+            url, body, extract, headers = check_key.request_spec(
+                "@cf/meta/llama-3.3-70b-instruct-fp8-fast")
+        self.assertIn("/accounts/acct9/ai/run/", url)
+        self.assertEqual(headers("tok")["Authorization"], "Bearer tok")
+        self.assertFalse(body["stream"])
+        self.assertEqual(extract({"result": {"response": "READY"}}), "READY")
+        self.assertIn("refused", extract({"success": False,
+                                          "errors": [{"code": 7000, "message": "x"}]}))
+
+
 class EnvDrivesResolution(unittest.TestCase):
     def test_dotenv_provider_makes_the_default_a_gemini_id(self):
         import os

@@ -42,6 +42,15 @@ OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"]
 
 # Groq speaks the OpenAI wire format; ids drift, so `check_key.py --list` is truth.
 GROQ_BASE = "https://api.groq.com/openai/v1"
+# Cloudflare Workers AI: account-scoped URL, bearer token, {result:{response}}.
+CLOUDFLARE_BASE = "https://api.cloudflare.com/client/v4/accounts/{account}/ai"
+CLOUDFLARE_MODELS = [
+    "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "@cf/meta/llama-4-scout-17b-16e-instruct",
+    "@cf/qwen/qwq-32b",
+    "@cf/openai/gpt-oss-120b",
+]
+
 GROQ_MODELS = [
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
@@ -53,7 +62,11 @@ TIMEOUT_MSG = "Gemini is slow right now — the request timed out before it answ
 
 def provider_kind() -> str:
     kind = (os.environ.get("NEXCUT_PROVIDER") or "stub").strip().lower()
-    return "openai" if kind in ("groq",) else kind
+    if kind in ("groq",):
+        return "openai"
+    if kind in ("cloudflare", "workers-ai", "cf", "workersai"):
+        return "cloudflare"
+    return kind
 
 
 def provider_label() -> str:
@@ -109,6 +122,12 @@ def env_keys() -> list[str]:
     )
 
 
+def cloudflare_account() -> str:
+    return (os.environ.get("NEXCUT_CF_ACCOUNT")
+            or os.environ.get("CLOUDFLARE_ACCOUNT_ID")
+            or "").strip()
+
+
 def attempt_budget() -> int:
     """Upper bound on provider calls per extraction — dead-key lists stay cheap."""
     try:
@@ -157,6 +176,8 @@ def model_catalog() -> list[dict[str, str]]:
         ids = [m.strip() for m in raw.split(",") if m.strip()]
     elif provider_kind() == "openai":
         ids = list(GROQ_MODELS if provider_label() == "groq" else OPENAI_MODELS)
+    elif provider_kind() == "cloudflare":
+        ids = list(CLOUDFLARE_MODELS)
     elif provider_kind() == "gemini":
         ids = list(GEMINI_MODELS)
     else:
@@ -379,6 +400,52 @@ class OpenAIProvider(_HttpProvider):
         return text
 
 
+class CloudflareProvider(_HttpProvider):
+    name = "cloudflare"
+
+    def _attempt(self, model: str, system: str, user: str, key: str) -> str:
+        account = cloudflare_account()
+        if not account:
+            raise ProviderError(
+                "Cloudflare Workers AI needs your account id.",
+                hint="Set NEXCUT_CF_ACCOUNT=<account id> in .env (Cloudflare dashboard "
+                     "-> Workers AI -> Use REST API shows both values), then restart.",
+            )
+        url = f"{CLOUDFLARE_BASE.format(account=account)}/run/{resolve_model(model)}"
+        body = {
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "stream": False,
+        }
+        payload = self._post(url, body, {"Authorization": f"Bearer {key}"},
+                             label=resolve_model(model))
+        if payload.get("success") is False:
+            errors = payload.get("errors") or [{}]
+            code = errors[0].get("code", "")
+            raise ProviderError(
+                f"Cloudflare refused the call ({code}): "
+                f"{errors[0].get('message', 'no detail')}",
+                hint="Check the token has the Workers AI permission and the account id "
+                     "matches the account the token belongs to.",
+            )
+        result = payload.get("result") or {}
+        text = result.get("response") or result.get("text")
+        if text is None:
+            choices = result.get("choices") or []
+            if choices:
+                text = (choices[0].get("message") or {}).get("content")
+        if not isinstance(text, str) or not text.strip():
+            raise ProviderError(
+                "Cloudflare returned no text for this model.",
+                hint="Some Workers AI models are not chat models — pick one from "
+                     "`python3 tools/check_key.py --list`.",
+            )
+        self.served_model = resolve_model(model)
+        return text
+
+
 class StubProvider:
     """Offline demo provider — no network, no key, same output contract."""
 
@@ -472,6 +539,8 @@ def make_provider(api_key: str = "") -> object:
     kind = provider_kind()
     if kind == "gemini":
         return GeminiProvider(api_key)
+    if kind == "cloudflare":
+        return CloudflareProvider(api_key)
     if kind == "openai":
         return OpenAIProvider(api_key)
     return StubProvider()

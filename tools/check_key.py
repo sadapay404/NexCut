@@ -54,6 +54,11 @@ def provider() -> str:
     return (os.environ.get("NEXCUT_PROVIDER") or "gemini").strip().lower()
 
 
+def cf_account() -> str:
+    return (os.environ.get("NEXCUT_CF_ACCOUNT")
+            or os.environ.get("CLOUDFLARE_ACCOUNT_ID") or "").strip()
+
+
 def base_url() -> str:
     if provider() == "groq":
         default = GROQ_BASE
@@ -117,7 +122,20 @@ def list_models(key: str) -> int:
     """Print every id this key can actually call."""
     kind = provider()
     try:
-        if kind in ("groq", "openai"):
+        if kind in ("cloudflare", "workers-ai", "cf", "workersai"):
+            account = cf_account()
+            if not account:
+                print("No account id: set NEXCUT_CF_ACCOUNT in .env.")
+                return 2
+            payload = _get(
+                f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/models/search"
+                "?per_page=200",
+                {"Authorization": f"Bearer {key}"},
+            )
+            ids = sorted({m.get("name", "") for m in (payload.get("result") or [])
+                          if m.get("name")}, reverse=True)
+            print(f"{len(ids)} Workers AI model(s):")
+        elif kind in ("groq", "openai"):
             base = base_url()
             payload = _get(f"{base}/models", {"Authorization": f"Bearer {key}"})
             ids = sorted({m.get("id", "") for m in payload.get("data", []) if m.get("id")},
@@ -185,6 +203,25 @@ def check_key_suggestion(body: str) -> str:
 def request_spec(model: str):
     """(url, body, extract, header builder) for the configured provider."""
     kind = provider()
+    if kind in ("cloudflare", "workers-ai", "cf", "workersai"):
+        body = {
+            "messages": [{"role": "user", "content": "Reply with the single word READY."}],
+            "stream": False,
+        }
+
+        def cf_extract(payload: dict) -> str:
+            if payload.get("success") is False:
+                err = (payload.get("errors") or [{}])[0]
+                return f"refused ({err.get('code')}): {err.get('message')}"
+            result = payload.get("result") or {}
+            text = result.get("response") or result.get("text")
+            if text is None and (result.get("choices") or []):
+                text = (result["choices"][0].get("message") or {}).get("content")
+            return (text or "").strip() or "(empty)"
+
+        url = (f"https://api.cloudflare.com/client/v4/accounts/{cf_account()}"
+               f"/ai/run/{model}")
+        return url, body, cf_extract, lambda key: {"Authorization": f"Bearer {key}"}
     if kind in ("groq", "openai"):
         base = base_url()
         body = {
@@ -269,7 +306,13 @@ def main(argv: list[str]) -> int:
     print(f"provider {kind}")
     print(f"model {model}")
 
-    if kind in ("groq", "openai"):
+    if kind in ("cloudflare", "workers-ai", "cf", "workersai"):
+        url, body, extract, headers_for = request_spec(model)
+        headers = headers_for(key)
+        if not cf_account():
+            print("\nNo account id: set NEXCUT_CF_ACCOUNT in .env, then restart.")
+            return 2
+    elif kind in ("groq", "openai"):
         base = base_url()
         url = f"{base}/chat/completions"
         headers = {"Authorization": f"Bearer {key}"}
