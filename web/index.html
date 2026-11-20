@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clip Studio — Sheikh Arsalan Automation</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">SAA</div>
+    <div class="brand-name">Sheikh Arsalan Automation</div>
+    <div class="brand-div" aria-hidden="true"></div>
+    <div class="brand-sub">Clip Studio</div>
+  </div>
+  <div class="header-right">
+    <div class="badges">
+      <span class="badge" id="providerBadge"><i class="dot"></i><strong>provider</strong>&nbsp;<span id="providerText">—</span></span>
+      <span class="badge" id="promptBadge"><i class="dot"></i><strong>prompt</strong>&nbsp;<span id="promptText">—</span></span>
+      <span class="badge" id="toolsBadge"><i class="dot"></i><strong>cutting</strong>&nbsp;<span id="toolsText">—</span></span>
+    </div>
+    <button class="btn small ghost" id="themeBtn" type="button" aria-label="Switch colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="app-body">
+
+  <!-- ───────── sidebar ───────── -->
+  <aside class="sidebar">
+    <div class="sidebar-scroll">
+
+      <section class="panel">
+        <div class="panel-head"><h2>Source</h2><span class="step">01</span></div>
+        <div class="field">
+          <label class="lbl" for="ytUrl">YouTube URL</label>
+          <input id="ytUrl" type="text" inputmode="url" autocomplete="off" spellcheck="false"
+                 placeholder="https://www.youtube.com/watch?v=…">
+          <p class="hint" id="sourceState">No source</p>
+        </div>
+
+        <details class="fold" id="transcriptFold">
+          <summary>
+            <i class="chev" aria-hidden="true"></i>Transcript
+            <span class="meta" id="charBadge">empty</span>
+          </summary>
+          <textarea id="transcript" spellcheck="false"
+                    placeholder="00:00:08 - line as spoken&#10;00:00:16 - next line"></textarea>
+          <div class="btn-row">
+            <button class="btn small" id="uploadBtn" type="button">Upload file</button>
+            <button class="btn small" id="sampleBtn" type="button">Load sample</button>
+          </div>
+          <input id="fileInput" type="file" accept=".txt,.srt,.vtt" hidden>
+        </details>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Output</h2><span class="step">02</span></div>
+        <div class="field">
+          <label class="lbl" for="nicheSel">Niche</label>
+          <select id="nicheSel"></select>
+        </div>
+        <div class="field" id="subWrap" hidden>
+          <label class="lbl" for="subSel">Sub-category</label>
+          <select id="subSel"></select>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="lbl" for="audienceSel">Audience</label>
+            <select id="audienceSel"></select>
+          </div>
+          <div class="field">
+            <label class="lbl" for="langSel">Language</label>
+            <select id="langSel"></select>
+          </div>
+          <div class="field">
+            <label class="lbl" for="numClips">Clips</label>
+            <input id="numClips" type="number" min="1" max="12" step="1" value="5">
+          </div>
+          <div class="field">
+            <label class="lbl" for="windowSel">Length</label>
+            <select id="windowSel"></select>
+          </div>
+          <div class="field" id="customMinWrap" hidden>
+            <label class="lbl" for="customMin">Min s</label>
+            <input id="customMin" type="number" min="10" value="45">
+          </div>
+          <div class="field" id="customMaxWrap" hidden>
+            <label class="lbl" for="customMax">Max s</label>
+            <input id="customMax" type="number" min="15" value="90">
+          </div>
+        </div>
+        <div class="field">
+          <label class="lbl" for="alreadyExtracted">Exclude</label>
+          <input id="alreadyExtracted" type="text" autocomplete="off"
+                 placeholder="published hooks or timestamps">
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Model</h2><span class="step">03</span></div>
+        <div class="field">
+          <label class="lbl" for="modelSel">Model</label>
+          <select id="modelSel"></select>
+        </div>
+        <div class="field">
+          <label class="lbl" for="apiKey">API key</label>
+          <div class="inline">
+            <input id="apiKey" type="password" autocomplete="off" placeholder="key">
+            <button class="btn small" id="showKey" type="button">Show</button>
+          </div>
+        </div>
+        <label class="check"><input id="rememberKey" type="checkbox">Remember on this device</label>
+        <label class="check"><input id="cascadeToggle" type="checkbox" checked>Fall back across models</label>
+        <p class="hint" id="providerNote"></p>
+      </section>
+    </div>
+
+    <div class="sidebar-actions">
+      <button class="btn primary block" id="runBtn" type="button">
+        Run extraction <kbd class="kbd">Ctrl ↵</kbd>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ───────── content ───────── -->
+  <main class="content" id="content">
+
+    <section class="pane" id="emptyPane">
+      <div class="empty-wrap">
+        <div>
+          <h2 class="empty-title" id="emptyTitle">No session</h2>
+          <p class="empty-note" id="emptyNote">Paste a YouTube URL to fetch captions and run an extraction.</p>
+        </div>
+        <table class="kv-table" id="metaTable" hidden></table>
+      </div>
+    </section>
+
+    <section class="pane" id="progressPane" hidden>
+      <div class="prog-wrap">
+        <div class="prog-top">
+          <h1 id="stageText">Queued</h1>
+          <span class="pct" id="pctText">0%</span>
+        </div>
+        <div class="bar"><i id="barFill"></i></div>
+        <pre class="log" id="stageLog" aria-live="polite"></pre>
+      </div>
+    </section>
+
+    <section class="pane" id="errorPane" hidden></section>
+
+    <section id="resultsPane" class="res" hidden>
+      <div class="res-top">
+        <div class="res-title">
+          <h1 id="resTitle">—</h1>
+          <div class="res-meta" id="resMeta"></div>
+        </div>
+        <div class="res-tools">
+          <button class="btn small" id="copyJsonBtn" type="button">Copy response</button>
+          <button class="btn small" id="downloadBtn" type="button">Download</button>
+          <button class="btn small ghost" id="newRunBtn" type="button">New run</button>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><b id="statCandidates">0</b><span>Candidates</span></div>
+        <div class="stat"><b id="statKept">0</b><span>Kept</span></div>
+        <div class="stat"><b id="statRejected">0</b><span>Rejected</span></div>
+        <div class="stat"><b id="statRequested">0</b><span>Requested</span></div>
+      </div>
+
+      <div class="res-body">
+        <div class="res-left">
+          <div class="seg" id="segTabs" role="tablist" style="margin:12px 20px">
+            <button role="tab" data-view="clips" aria-selected="true" type="button">
+              Clips<span class="n" id="tabClipsN">0</span>
+            </button>
+            <button role="tab" data-view="rejected" aria-selected="false" type="button">
+              Rejected<span class="n" id="tabRejectedN">0</span>
+            </button>
+            <button role="tab" data-view="raw" aria-selected="false" type="button">
+              Response
+            </button>
+          </div>
+
+          <div id="viewClips">
+            <table class="grid">
+              <thead>
+                <tr>
+                  <th class="c-n">#</th>
+                  <th class="c-time">Start</th>
+                  <th class="c-time">End</th>
+                  <th class="c-dur">Length</th>
+                  <th class="c-avg">Score</th>
+                  <th class="c-hook">Hook</th>
+                </tr>
+              </thead>
+              <tbody id="clipRows"></tbody>
+            </table>
+            <p class="hint" id="clipsEmpty" style="padding:0 20px" hidden>No clip passed the rule check.</p>
+          </div>
+
+          <div id="viewRejected" class="plain-view" hidden>
+            <ul class="rej-list" id="rejectedList"></ul>
+            <p class="hint" id="rejectedEmpty" hidden>No rejections.</p>
+          </div>
+
+          <div id="viewRaw" hidden>
+            <pre class="raw" id="rawAnswer"></pre>
+          </div>
+        </div>
+
+        <div class="res-right">
+          <div class="insp-head">
+            <h2 id="inspTitle">No clip selected</h2>
+            <span class="mono" id="inspTime"></span>
+          </div>
+          <div class="insp-body" id="inspBody"></div>
+
+          <div class="export">
+            <div class="export-head">
+              <h3>Export MP4</h3>
+              <span class="mono" id="exportQuality"></span>
+            </div>
+            <div class="export-row">
+              <select id="qualitySel" aria-label="Export quality"></select>
+              <button class="btn small" id="cutBtn" type="button" disabled>Cut clips</button>
+            </div>
+            <div class="cutbar"><i id="cutFill"></i></div>
+            <p class="hint" id="cutState">—</p>
+            <ul class="files" id="fileList"></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer class="statusbar">
+  <div class="left">
+    <span id="statusText">Ready</span>
+    <span class="sep" aria-hidden="true"></span>
+    <span id="statusHint"></span>
+  </div>
+  <div class="right">
+    <span id="statusProvider"></span>
+    <span id="statusElapsed"></span>
+    <span id="statusVersion"></span>
+  </div>
+</footer>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
