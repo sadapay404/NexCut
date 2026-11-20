@@ -122,7 +122,7 @@ class TestDownload(unittest.TestCase):
                                return_value=fake_proc(returncode=1, stderr="ERROR: sign in required")):
             with self.assertRaises(cutter.CutterError) as ctx:
                 cutter.download("abc", 1080)
-        self.assertIn("bot-check", ctx.exception.hint)
+        self.assertIn("cookies.txt", ctx.exception.hint)
 
 
 class TestCut(unittest.TestCase):

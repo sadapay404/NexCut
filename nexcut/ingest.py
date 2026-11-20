@@ -26,6 +26,8 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/122.0 Safari/537.36"
@@ -265,6 +267,18 @@ def _via_watch_page(vid: str, language: str) -> Transcript:
     )
 
 
+def cookie_path() -> str:
+    """Same rule as the cutter: NEXCUT_COOKIES, else ./cookies.txt if it exists."""
+    raw = os.environ.get("NEXCUT_COOKIES", "").strip()
+    path = Path(raw) if raw else (ROOT / "cookies.txt")
+    return str(path) if path.is_file() and path.stat().st_size > 0 else ""
+
+
+def cookies_arg() -> list[str]:
+    found = cookie_path()
+    return ["--cookies", found] if found else []
+
+
 # --------------------------------------------------------------------------
 # strategy 2: yt-dlp
 # --------------------------------------------------------------------------
@@ -274,6 +288,7 @@ def _via_ytdlp(vid: str, language: str) -> Transcript:
         if exe:
             cmd = [
                 exe, "--skip-download", "--write-auto-subs", "--write-subs",
+                *cookies_arg(),
                 "--sub-langs", f"{language}.*,{language}", "--sub-format", "vtt",
                 "-o", str(Path(tmp) / "%(id)s.%(ext)s"),
                 f"https://www.youtube.com/watch?v={vid}",
@@ -287,10 +302,13 @@ def _via_ytdlp(vid: str, language: str) -> Transcript:
                 import yt_dlp  # noqa: PLC0415
             except ImportError as exc:
                 raise IngestError("yt-dlp is not installed.", "pip install yt-dlp") from exc
+            cookie_file = cookie_path()
             opts = {"skip_download": True, "writesubtitles": True,
                     "writeautomaticsub": True, "subtitleslangs": [f"{language}.*", language],
                     "subtitlesformat": "vtt", "outtmpl": str(Path(tmp) / "%(id)s.%(ext)s"),
                     "quiet": True, "noprogress": True}
+            if cookie_file:
+                opts["cookiefile"] = cookie_file
             try:
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     ydl.download([f"https://www.youtube.com/watch?v={vid}"])

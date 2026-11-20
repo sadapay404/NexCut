@@ -18,6 +18,7 @@ missing binary produces an install instruction rather than a stack trace.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -98,6 +99,21 @@ def _require_cut_tools() -> list[str]:
 
 
 # --------------------------------------------------------------------------
+# cookies (Cloud Shell, VPS and any datacenter IP get bot-checked by YouTube)
+# --------------------------------------------------------------------------
+COOKIES_ENV = "NEXCUT_COOKIES"
+
+
+def cookies_arg() -> list[str]:
+    """`--cookies <file>` when one is configured or a cookies.txt sits in the repo."""
+    raw = os.environ.get(COOKIES_ENV, "").strip()
+    path = Path(raw) if raw else (ROOT / "cookies.txt")
+    if path.is_file() and path.stat().st_size > 0:
+        return ["--cookies", str(path)]
+    return []
+
+
+# --------------------------------------------------------------------------
 # qualities
 # --------------------------------------------------------------------------
 _H = re.compile(r"(\d{3,4})")
@@ -106,7 +122,7 @@ _H = re.compile(r"(\d{3,4})")
 def probe_heights(video_id: str) -> list[int]:
     """Descending list of heights >= 1080 actually available for this video."""
     ytdlp = _require_cut_tools()
-    proc = _run([*ytdlp, "-J", "--no-warnings", "--no-playlist",
+    proc = _run([*ytdlp, "-J", "--no-warnings", "--no-playlist", *cookies_arg(),
                  f"https://www.youtube.com/watch?v={video_id}"], timeout=120)
     if proc.returncode != 0:
         tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
@@ -142,7 +158,7 @@ def download(video_id: str, height: int) -> Path:
 
     fmt = f"bv*[height<={height}]+ba/b[height<={height}]/b"
     proc = _run([
-        *ytdlp, "--no-playlist", "--no-warnings", "--no-progress",
+        *ytdlp, "--no-playlist", "--no-warnings", "--no-progress", *cookies_arg(),
         "-f", fmt, "--merge-output-format", "mp4",
         "-o", str(target), f"https://www.youtube.com/watch?v={video_id}",
     ])
@@ -150,7 +166,8 @@ def download(video_id: str, height: int) -> Path:
         tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
         raise CutterError(
             "The source video could not be downloaded.",
-            f"{tail[0][:200]} — if YouTube asks for a sign-in, its bot-check is blocking this network.",
+            f"{tail[0][:200]} — if YouTube asks for a sign-in, export cookies.txt from a browser "
+            "and drop it in the repo root (or set NEXCUT_COOKIES).",
         )
     return target
 

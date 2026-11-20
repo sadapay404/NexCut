@@ -71,7 +71,7 @@ settings. See `prompts/README.md`; start from `prompts/master.example.md`.
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests -v      # 114 backend/contract tests
+python3 -m unittest discover -s tests -v      # 118 backend/contract tests
 npm install && npm run test:ui                # 36 UI assertions (jsdom, no browser)
 ```
 
@@ -89,4 +89,4 @@ not do layout — see `docs/ui-plan.md` for what that means.
 
 Env: `NEXCUT_PROVIDER`, `NEXCUT_API_KEY`, `NEXCUT_MODELS`, `NEXCUT_MODEL_MAP`, `NEXCUT_BACKUP_KEY`,
 `NEXCUT_OPENAI_BASE`, `NEXCUT_PROMPT_DIR`, `NEXCUT_APPEND_CONTRACT`,
-`NEXCUT_INVITE_CODES`, `NEXCUT_OFFLINE`, `NEXCUT_PORT`.
+`NEXCUT_INVITE_CODES`, `NEXCUT_OFFLINE`, `NEXCUT_PORT`, `NEXCUT_COOKIES`.
