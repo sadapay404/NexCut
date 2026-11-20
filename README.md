@@ -68,16 +68,39 @@ settings. See `prompts/README.md`; start from `prompts/master.example.md`.
 | `tools/parity.py` | gate any recorded model answer and see what survives |
 | `docs/` | recon, contract, build notes, handover |
 
+## Any screen, any device
+
+The frame is designed for 1366×600, then it gets out of the way:
+
+- **short viewports** (browser chrome eating a laptop screen, a phone in landscape)
+  drop out of the fixed frame below 560px tall and let the page itself scroll —
+  the bottom of the card is never unreachable;
+- **≤1024 / 720 / 520 / 380px** restack the details panel, the clip rows and the
+  length presets, and drop padding that no longer fits;
+- **touch** (`pointer: coarse`) gets 40px targets, no hover-only affordances and
+  `touch-action: manipulation` (no 300 ms iOS tap delay);
+- **copy buttons work over plain HTTP.** `navigator.clipboard` is undefined on
+  `http://192.168.x.x:8137`, so `copy()` falls back to a hidden textarea +
+  `execCommand` — that was the one genuinely broken control on a LAN address;
+- `100dvh` + safe-area insets keep it honest under mobile browser toolbars and notches;
+- `node tools/ui_audit.js` fails the build if any of that regresses.
+
+Other devices on the same network: the server already binds `0.0.0.0` and prints
+the LAN URL it should be opened at, e.g. `http://192.168.1.24:8137`.
+
 ## Test
 
 ```bash
 python3 -m unittest discover -s tests -v      # 219 backend/contract tests
-npm install && npm run test:ui                # 36 UI assertions (jsdom, no browser)
+npm install && npm run test:ui                # 40 UI assertions (jsdom, no browser)
+node tools/ui_audit.js                        # static UI audit: handlers, breakpoints, a11y
 ```
 
 The UI harness boots `web/index.html` + `web/app.js` against a stubbed API and
 fails on any exception, any `console.error`, or any empty critical node. It does
-not do layout — see `docs/ui-plan.md` for what that means.
+not do layout — see `docs/ui-plan.md` for what that means. The audit covers what
+jsdom cannot: every control has a handler, every breakpoint exists, dead CSS is
+gone, and the clipboard fallback is still there.
 
 ## API
 

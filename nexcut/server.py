@@ -488,10 +488,25 @@ def load_dotenv(path: str | Path = ".env") -> None:
             os.environ[key] = value
 
 
+def _lan_url(port: int) -> str | None:
+    """Best-effort LAN address, so phones and tablets know what to open."""
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            return f"http://{sock.getsockname()[0]}:{port}"
+    except OSError:
+        return None
+
+
 def serve(port: int | None = None, host: str = "0.0.0.0") -> None:
     port = port or int(os.environ.get("NEXCUT_PORT", "8137"))
     httpd = ThreadingHTTPServer((host, port), Handler)
-    print(f"[nexcut] v{__version__} on http://{host}:{port}  provider={os.environ.get('NEXCUT_PROVIDER','stub')}")
+    print(f"[nexcut] v{__version__} on http://localhost:{port}  provider={os.environ.get('NEXCUT_PROVIDER','stub')}")
+    lan = _lan_url(port) if host in ("0.0.0.0", "") else None
+    if lan:
+        print(f"[nexcut] other devices on this network: {lan}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

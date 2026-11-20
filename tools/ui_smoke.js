@@ -166,6 +166,30 @@ function makeFetch(log) {
   checks["packaging fields"] = all("#clipList .clip-more .dblock").length;
   checks["thumbnail text"] = $("clipList").textContent.includes("HE PRESSED IT 💀");
 
+  // copy must work on an insecure origin: http://<lan-ip>:8137 has NO navigator.clipboard
+  const copyBtn = sel("#clipList .clip-more .copy");
+  checks["copy control"] = Boolean(copyBtn);
+  if (copyBtn) {
+    const saved = window.navigator.clipboard;
+    delete window.navigator.clipboard;   // exactly what a plain-http LAN origin gives you
+    const before = errors.length;
+    copyBtn.click();
+    await new Promise((r) => setTimeout(r, 40));
+    checks["copy fallback no crash"] = errors.length === before;
+    checks["copy fallback toast"] = ($("toasts").textContent || "").trim();
+    window.navigator.clipboard = saved;
+  }
+
+  // every visible control must survive a click without throwing
+  {
+    const before = errors.length;
+    sel('#modeTabs button[data-mode="downloader"]').click();
+    sel('#modeTabs button[data-mode="cutter"]').click();
+    $("themeBtn").click();
+    $("themeBtn").click();
+    checks["theme toggle no crash"] = errors.length === before;
+  }
+
   // ZIP toggle turns the row buttons into one archive button
   $("zipToggle").checked = true;
   $("zipToggle").dispatchEvent(new window.Event("change"));
@@ -211,6 +235,7 @@ function makeFetch(log) {
     "thumbnail text", "zip button visible", "row downloads hidden", "downloader pane",
     "back to cutter", "credits in footer", "back to landing", "credits under the bar",
     "failed fetch still opens details", "failed fetch drawer",
+    "copy control", "copy fallback no crash", "copy fallback toast", "theme toggle no crash",
   ];
   const mustBeNonZero = ["length presets", "clip rows", "download links", "packaging fields"];
   const expected = { "failed fetch badge": "no captions", "clips min": "5", "clips max": "15", "default length": "40-50",

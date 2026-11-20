@@ -63,3 +63,29 @@ install without root).
 2. Sort/filter on the table (score, length) once lists exceed one screen.
 3. Downloader tab: video / audio, quality from `/api/video-quality`, same queue.
 4. Real run with an env key: confirm the MP4 starts on the requested frame.
+
+## Robustness pass — 2026-11-20
+
+A device-agnostic audit of the v9 studio, driven by `node tools/ui_audit.js`
+(static) plus the jsdom smoke flow (behavioural). Layout is still unverified in
+pixels — jsdom has no layout engine — so every rule below is a measured CSS
+constraint, not a screenshot.
+
+Found and fixed:
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| bottom of the card unreachable on short laptops | `body { overflow: hidden }` with the frame at `100vh` and no escape | below `560px` tall the page scrolls (`height:auto`, `grid-template-rows: … auto`); 600px keeps the fixed frame so the design target is unchanged |
+| frame clipped under mobile browser toolbars | `100vh` is taller than the visible area on iOS/Android | `min-height: 100dvh` alongside the `vh` fallback, plus `env(safe-area-inset-*)` padding |
+| copy buttons dead on a LAN address | `navigator.clipboard` is `undefined` outside a secure context | `copy()` falls back to a hidden `<textarea>` + `execCommand`, and the smoke test deletes `navigator.clipboard` to prove it |
+| 27px tap targets, hover-only styling | no `pointer: coarse` rules | 36–40px targets, `:active` feedback, `touch-action: manipulation` |
+| rows and the config panel overflowed on phones | desktop grid columns only | breakpoints at 1024 / 720 / 520 / 380 (single-column details, `.clip-row` becomes a flex stack, `.seg` wraps 2×2, labels unstick from fixed px) |
+| no visible focus for keyboard users | `input:focus-visible` was reset to none with no replacement | one `:focus-visible` ring on every interactive element |
+| link bar mangled by phone keyboards | `type=text` with OS autocorrect | `type=url`, `inputmode=url`, `autocomplete=off`, `autocapitalize=off`, `enterkeyhint=go` |
+| 68 dead CSS rules | v8 markup renamed, rules left behind | removed (verified: the class name appears nowhere in `index.html` or `app.js`) |
+
+Regressions now caught automatically by `tools/ui_audit.js` (exit 1 on any FAIL):
+missing handler on any control, missing breakpoint, `overflow:hidden` with no
+short-viewport escape, missing `pointer: coarse` / `:focus-visible` /
+`prefers-reduced-motion` / safe-area rules, unstyled markup classes, and a
+`#ytUrl` that is not URL-keyboard friendly.

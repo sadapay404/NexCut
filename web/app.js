@@ -76,8 +76,36 @@ function toast(message) {
   setTimeout(() => node.remove(), 1900);
 }
 
-function copy(text) {
-  navigator.clipboard.writeText(text).then(() => toast("Copied"), () => toast("Copy blocked"));
+async function copy(text) {
+  const value = String(text == null ? "" : text);
+  if (!value.trim()) return toast("Nothing to copy");
+
+  // The clipboard API only exists in a secure context. Opening the studio as
+  // http://192.168.x.x:8137 (phone, tablet, another laptop) is NOT one, so every
+  // copy button used to fail there. Fall back to a hidden textarea + execCommand.
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return toast("Copied");
+    } catch {
+      /* fall through to the legacy path */
+    }
+  }
+  const box = document.createElement("textarea");
+  box.value = value;
+  box.setAttribute("readonly", "");
+  box.style.cssText = "position:fixed;top:0;left:-9999px;width:1px;height:1px;opacity:0";
+  document.body.appendChild(box);
+  let ok = false;
+  try {
+    box.select();
+    box.setSelectionRange(0, value.length);
+    ok = document.execCommand("copy");
+  } catch {
+    ok = false;
+  }
+  box.remove();
+  toast(ok ? "Copied" : "Copy blocked — select the text instead");
 }
 
 const PANES = ["landPane", "setupPane", "workPane", "errorPane", "resultsPane"];
