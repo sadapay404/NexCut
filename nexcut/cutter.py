@@ -22,6 +22,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -48,7 +49,8 @@ def _ytdlp_invocation() -> list[str] | None:
     try:
         import yt_dlp  # noqa: F401,PLC0415
 
-        return ["python3", "-m", "yt_dlp"]
+        # sys.executable: "python3" does not exist on Windows
+        return [sys.executable, "-m", "yt_dlp"]
     except ImportError:
         return None
 

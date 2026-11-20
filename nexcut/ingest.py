@@ -281,6 +281,20 @@ def _pick_track(tracks: list[dict], preferred: str = "en") -> dict | None:
     return sorted(tracks, key=score)[0] if tracks else None
 
 
+# Only the sign-in wall counts. "This video is unavailable" means the video, not
+# the network, so it must not trigger the IP-block verdict.
+BOT_WALL_MARKERS = ("sign in to confirm", "not a bot", "login_required")
+
+
+def looks_like_ip_block(errors: list[str]) -> bool:
+    """True when several independent methods were walled the same way."""
+    if not errors:
+        return False
+    walled = sum(1 for e in errors
+                 if any(marker in e.lower() for marker in BOT_WALL_MARKERS))
+    return walled >= 2
+
+
 def inspect_innertube(vid: str, language: str = "en") -> list[dict]:
     """What each client identity actually answered — for diagnostics, not for runs."""
     report: list[dict] = []
@@ -710,6 +724,16 @@ def fetch_transcript(url_or_id: str, *, language: str = "en", use_cache: bool = 
                 "video_id": tr.video_id, "title": tr.title, "channel": tr.channel,
             }))
         return tr
+
+    if looks_like_ip_block(errors):
+        raise IngestError(
+            "YouTube is blocking this machine's IP address.",
+            "Every method hit 'Sign in to confirm you're not a bot', including on "
+            "videos that certainly have captions — that is YouTube refusing this "
+            "network, not a problem with the video. Fix any of: run NexCut on your "
+            "own computer instead of a cloud shell, put a cookies.txt (exported from a "
+            "browser) in the repo root and restart, or paste the transcript manually.",
+        )
 
     hint = "Tried: " + " | ".join(errors)
     if len(hint) > 900:

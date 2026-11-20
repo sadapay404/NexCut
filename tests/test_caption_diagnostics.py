@@ -20,8 +20,8 @@ class Aggregation(unittest.TestCase):
             mock.patch.object(ingest, "_via_innertube",
                               boom("no identity", "android-vr: LOGIN_REQUIRED")),
             mock.patch.object(ingest, "_via_timedtext", boom("nothing", "en: empty")),
-            mock.patch.object(ingest, "_via_watch_page", boom("consent page", "bot wall")),
-            mock.patch.object(ingest, "_via_ytdlp", boom("yt-dlp failed", "Sign in to confirm")),
+            mock.patch.object(ingest, "_via_watch_page", boom("consent page", "no player response")),
+            mock.patch.object(ingest, "_via_ytdlp", boom("yt-dlp failed", "no caption file")),
             mock.patch.object(ingest, "_via_transcript_api", boom("not installed", "pip install")),
         ]
         for patcher in patchers:
@@ -34,7 +34,7 @@ class Aggregation(unittest.TestCase):
                 patcher.stop()
         hint = ctx.exception.hint
         for needle in ("innertube", "timedtext", "watch-page", "yt-dlp",
-                       "transcript-api", "LOGIN_REQUIRED", "Sign in to confirm"):
+                       "transcript-api", "LOGIN_REQUIRED"):
             self.assertIn(needle, hint)
 
     def test_a_broken_strategy_does_not_hide_the_others(self):
@@ -58,6 +58,46 @@ class Aggregation(unittest.TestCase):
                                side_effect=ingest.IngestError("watch page blocked")):
             tr = ingest.fetch_transcript("https://youtu.be/abcdefghijk", use_cache=False)
         self.assertEqual(tr.title, "from player")
+
+
+class IpBlock(unittest.TestCase):
+    def test_three_walls_out_of_five_is_a_network_block(self):
+        errors = ["innertube: LOGIN_REQUIRED — Sign in to confirm you're not a bot",
+                  "timedtext: empty", "watch-page: no track",
+                  "yt-dlp: ERROR: Sign in to confirm you're not a bot",
+                  "transcript-api: not installed"]
+        self.assertTrue(ingest.looks_like_ip_block(errors))
+
+    def test_one_mention_is_not_a_block(self):
+        self.assertFalse(ingest.looks_like_ip_block(
+            ["innertube: LOGIN_REQUIRED", "timedtext: empty",
+             "watch-page: no track", "yt-dlp: no caption file", "api: missing"]))
+
+    def test_unavailable_video_is_not_a_network_block(self):
+        self.assertFalse(ingest.looks_like_ip_block(
+            ["innertube: ERROR — This video is unavailable",
+             "timedtext: empty", "watch-page: no track",
+             "yt-dlp: ERROR: Private video", "api: missing"]))
+
+    def test_empty_is_not_a_block(self):
+        self.assertFalse(ingest.looks_like_ip_block([]))
+
+    def test_pipeline_raises_the_network_message_not_a_wall_of_text(self):
+        wall = boom("walled", "LOGIN_REQUIRED — Sign in to confirm you're not a bot")
+        patchers = [mock.patch.object(ingest, name, wall) for name in
+                    ("_via_innertube", "_via_timedtext", "_via_watch_page",
+                     "_via_ytdlp", "_via_transcript_api")]
+        for patcher in patchers:
+            patcher.start()
+        try:
+            with self.assertRaises(ingest.IngestError) as ctx:
+                ingest.fetch_transcript("https://youtu.be/abcdefghijk", use_cache=False)
+        finally:
+            for patcher in patchers:
+                patcher.stop()
+        self.assertIn("blocking this machine's IP", str(ctx.exception))
+        for needle in ("own computer", "cookies.txt", "paste the transcript"):
+            self.assertIn(needle, ctx.exception.hint)
 
 
 class Inspection(unittest.TestCase):
