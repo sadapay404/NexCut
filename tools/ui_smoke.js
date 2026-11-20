@@ -105,9 +105,8 @@ function makeFetch(log) {
     "model options": $("modelSel").options.length,
     "window options": $("windowSel").options.length,
     "audience options": $("audienceSel").options.length,
-    "provider chip": $("providerText").textContent.trim(),
-    "prompt chip": $("promptText").textContent.trim(),
-    "tools chip": $("toolsText").textContent.trim(),
+    "side label": $("sideLabel").textContent.trim(),
+    "build tag": $("buildTag").textContent.trim(),
     "hero heading": /Sheikh Arsalan/.test($("emptyTitle").textContent),
     "mode tabs": window.document.querySelectorAll("#modeTabs button").length,
     "config chips": window.document.querySelectorAll("#dashConfig .chip").length,
@@ -139,9 +138,12 @@ function makeFetch(log) {
   await new Promise((r) => setTimeout(r, 1300));
 
   const rows = window.document.querySelectorAll("#clipRows tr").length;
-  const detailRows = window.document.querySelectorAll("#inspBody .irow").length;
+  const detailRows = window.document.querySelectorAll("#inspBody .dsec").length;
   checks["result rows"] = rows;
   checks["detail rows"] = detailRows;
+  checks["detail scores"] = window.document.querySelectorAll("#inspBody .srow").length;
+  checks["clip row cells"] = rows ? window.document.querySelectorAll("#clipRows tr td").length / rows : 0;
+  checks["clip link"] = !$("clipLink").hidden && /youtu\.be\/dQw4w9WgXcQ\?t=8$/.test($("clipLink").href);
   checks["results pane visible"] = !$("resultsPane").hidden;
   checks["cut enabled"] = !$("cutBtn").disabled;
 
@@ -166,12 +168,14 @@ function makeFetch(log) {
   console.log("── checks");
   Object.entries(checks).forEach(([k, v]) => console.log(`   ${k.padEnd(22)} ${v}`));
 
-  const mustBeNonZero = ["mode tabs", "config chips", "recent rows", "result rows", "detail rows", "file links"];
+  const mustBeNonZero = ["mode tabs", "config chips", "recent rows", "result rows", "detail rows",
+    "detail scores", "file links"];
   const bad = Object.entries(checks).filter(([k, v]) =>
     (k.endsWith("options") || mustBeNonZero.includes(k)) ? !v : false);
   const mustBeTrue = ["window label short", "hero heading", "options drawer", "options closes",
-    "transcript drawer", "downloader pane", "back to cutter", "back to landing"];
-  const misnamed = Object.entries(checks).filter(([k, v]) => mustBeTrue.includes(k) && !v);
+    "transcript drawer", "downloader pane", "back to cutter", "back to landing", "clip link"];
+  const misnamed = Object.entries(checks).filter(([k, v]) =>
+    mustBeTrue.includes(k) ? !v : (k === "clip row cells" ? v !== 4 : false));
 
   if (errors.length) {
     console.log("\n── errors");

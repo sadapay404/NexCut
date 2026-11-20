@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0c0a08">
 <title>NexCut — Sheikh Arsalan Automation</title>
-<link rel="stylesheet" href="/static/style.css?v=7">
+<link rel="stylesheet" href="/static/style.css?v=8">
 </head>
 <body>
 
@@ -16,10 +16,9 @@
     <symbol id="i-scissors" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><path d="M8 7.6L20 17M8 16.4L20 7"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v10M8 11l4 4 4-4M4 19h16"/></symbol>
     <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a4 4 0 0 0 6 0l2-2a4 4 0 0 0-6-6l-1 1"/><path d="M14 11a4 4 0 0 0-6 0l-2 2a4 4 0 0 0 6 6l1-1"/></symbol>
-    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-8 8"/><path d="M18 14v5H5V6h5"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5H6a1 1 0 0 0-1 1v9"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3l9-16z"/><path d="M12 10v4M12 17v.5"/></symbol>
-    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
     <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 20V9M8 12l4-4 4 4M4 5h16"/></symbol>
     <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></symbol>
     <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14a8 8 0 1 1-9-11 6.5 6.5 0 0 0 9 11z"/></symbol>
@@ -28,7 +27,6 @@
     <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></symbol>
     <symbol id="i-history" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4h4"/><path d="M12 8v4.5l3 1.8"/></symbol>
     <symbol id="i-captions" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M8 12h3M14 12h2"/></symbol>
-    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></symbol>
     <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2.5"/><path d="M15 11l6-3.5v9L15 13z"/></symbol>
     <symbol id="i-audio" viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="7" cy="18" r="2.2"/><circle cx="17" cy="16" r="2.2"/></symbol>
   </defs>
@@ -66,15 +64,8 @@
   <!-- ══════════ CUTTER ══════════ -->
   <article class="card" id="cutterPane">
     <div class="card-top">
-      <span class="micro">Side A<span class="dash">—</span>Link intake</span>
-      <span class="micro card-state">
-        <i class="dot" id="stateDot"></i>
-        <span id="providerText">—</span>
-        <span class="dash">·</span>
-        <span id="promptText">—</span>
-        <span class="dash">·</span>
-        <span id="toolsText">—</span>
-      </span>
+      <span class="micro">Side A<span class="dash">—</span><span id="sideLabel">Link intake</span></span>
+      <span class="micro" id="buildTag">v0.1.0</span>
     </div>
 
     <div class="card-body">
@@ -109,7 +100,7 @@
             </button>
           </div>
 
-          <p class="source" id="sourceState">No source — paste a link, or open Transcript.</p>
+          <p class="source" id="sourceState">No source</p>
         </div>
 
         <!-- options drawer -->
@@ -151,18 +142,9 @@
               <span class="lbl">Model</span>
               <select id="modelSel"></select>
             </label>
-            <label class="field wide">
-              <span class="lbl">API key</span>
-              <span class="keyline">
-                <input id="apiKey" type="password" autocomplete="off" placeholder="paste your provider key">
-                <button class="ghost-btn" id="showKey" type="button">Show</button>
-              </span>
-            </label>
           </div>
           <div class="drawer-foot">
-            <label class="check"><input id="rememberKey" type="checkbox">Remember key on this device</label>
             <label class="check"><input id="cascadeToggle" type="checkbox" checked>Fallback model if the first fails</label>
-            <span class="note" id="providerNote"></span>
           </div>
         </div>
 
@@ -174,7 +156,7 @@
             <button class="ghost-btn" id="uploadBtn" type="button">
               <svg class="ic"><use href="#i-upload"/></svg>Upload .txt / .srt / .vtt
             </button>
-            <span class="note">Timestamps on every line. One clip per boundary.</span>
+            <span class="note">One timestamp per line.</span>
           </div>
           <input id="fileInput" type="file" accept=".txt,.srt,.vtt" hidden>
         </div>
@@ -183,8 +165,8 @@
         <div class="drawer" id="historyPanel" hidden>
           <div id="recentBody"></div>
           <div class="drawer-foot">
-            <button class="ghost-btn" id="clearRecent" type="button">Clear history</button>
-            <span class="note">Stored in this browser only.</span>
+            <button class="ghost-btn" id="clearRecent" type="button">Clear</button>
+            <span class="note">Kept in this browser only.</span>
           </div>
         </div>
 
@@ -216,21 +198,21 @@
             <p class="res-meta" id="resMeta"></p>
           </div>
           <div class="res-actions">
-            <button class="chip-btn" id="copyJsonBtn" type="button"><svg class="ic"><use href="#i-copy"/></svg>Report</button>
+            <button class="chip-btn" id="copyJsonBtn" type="button"><svg class="ic"><use href="#i-copy"/></svg>Answer</button>
             <button class="chip-btn" id="downloadBtn" type="button"><svg class="ic"><use href="#i-download"/></svg>Save</button>
             <button class="btn small" id="newRunBtn" type="button">New link</button>
           </div>
         </header>
 
         <div class="res-stats">
-          <div class="stat"><b id="statCandidates">0</b><span>candidates</span></div>
+          <div class="stat"><b id="statCandidates">0</b><span>found</span></div>
           <div class="stat"><b id="statKept">0</b><span>kept</span></div>
           <div class="stat"><b id="statRejected">0</b><span>rejected</span></div>
-          <div class="stat"><b id="statRequested">0</b><span>requested</span></div>
+          <div class="stat"><b id="statRequested">0</b><span>asked for</span></div>
         </div>
 
-        <div class="res-split">
-          <div class="res-left">
+        <div class="res-body">
+          <div class="res-main">
             <div class="tabs" id="segTabs" role="tablist">
               <button role="tab" data-view="clips" aria-selected="true" type="button">Clips<span id="tabClipsN">0</span></button>
               <button role="tab" data-view="rejected" aria-selected="false" type="button">Rejected<span id="tabRejectedN">0</span></button>
@@ -240,8 +222,10 @@
             <div id="viewClips" class="view">
               <table class="grid">
                 <thead><tr>
-                  <th class="c-n">#</th><th class="c-t">In</th><th class="c-t">Out</th>
-                  <th class="c-d">Length</th><th class="c-s">Score</th><th>Hook</th>
+                  <th class="c-n">#</th>
+                  <th>Clip</th>
+                  <th class="c-d">Length</th>
+                  <th class="c-s">Score</th>
                 </tr></thead>
                 <tbody id="clipRows"></tbody>
               </table>
@@ -258,28 +242,34 @@
             </div>
           </div>
 
-          <aside class="inspector">
-            <header class="insp-head">
-              <h3 id="inspTitle">No clip selected</h3>
-              <span class="mono" id="inspTime"></span>
+          <aside class="detail">
+            <header class="detail-head">
+              <div class="detail-id">
+                <h3 id="inspTitle">Clip 1</h3>
+                <span class="mono" id="inspTime"></span>
+              </div>
+              <div class="detail-actions">
+                <a class="open-link" id="clipLink" href="#" target="_blank" rel="noreferrer" hidden>
+                  Open<svg class="ic"><use href="#i-external"/></svg>
+                </a>
+                <span class="score-lg" id="inspScore"></span>
+              </div>
             </header>
-            <div class="insp-body" id="inspBody"></div>
-
-            <div class="export">
-              <div class="export-head">
-                <h4><svg class="ic"><use href="#i-scissors"/></svg>Cut</h4>
-                <span class="mono" id="exportQuality"></span>
-              </div>
-              <div class="export-row">
-                <select id="qualitySel" aria-label="Export quality"></select>
-                <button class="btn small primary" id="cutBtn" type="button" disabled>Cut</button>
-              </div>
-              <div class="bar thin"><i id="cutFill"></i></div>
-              <p class="note" id="cutState">—</p>
-              <ul class="files" id="fileList"></ul>
-            </div>
+            <div class="detail-body" id="inspBody"></div>
           </aside>
         </div>
+
+        <footer class="export">
+          <div class="export-row">
+            <span class="export-label"><svg class="ic"><use href="#i-scissors"/></svg>Cut</span>
+            <select id="qualitySel" aria-label="Export quality"></select>
+            <button class="btn small primary" id="cutBtn" type="button" disabled>Cut MP4s</button>
+            <div class="export-track" id="cutTrack" hidden><div class="bar thin"><i id="cutFill"></i></div></div>
+            <span class="note export-state" id="cutState"></span>
+            <span class="mono export-q" id="exportQuality"></span>
+          </div>
+          <ul class="files" id="fileList"></ul>
+        </footer>
       </section>
     </div>
   </article>
@@ -288,14 +278,13 @@
   <article class="card" id="downloaderPane" hidden>
     <div class="card-top">
       <span class="micro">Side B<span class="dash">—</span>Save</span>
-      <span class="micro card-state"><i class="dot idle"></i>Not built yet</span>
+      <span class="micro"><i class="dot idle"></i>Not built yet</span>
     </div>
 
     <div class="card-body">
       <section class="landing">
         <p class="kicker">NexCut <span class="dash">/</span> downloader</p>
         <h1 class="display">Save the ones<br>worth <em>keeping</em>.</h1>
-        <p class="sub">Same link, same key. Video or audio, at the quality you pick.</p>
 
         <div class="intake">
           <div class="urlbar is-disabled">
@@ -306,9 +295,11 @@
           <div class="underbar">
             <span class="chip-btn is-static"><svg class="ic"><use href="#i-video"/></svg>Video</span>
             <span class="chip-btn is-static"><svg class="ic"><use href="#i-audio"/></svg>Audio</span>
-            <span class="chip-btn is-static">2160p · 1440p · 1080p</span>
+            <span class="chip-btn is-static">2160p</span>
+            <span class="chip-btn is-static">1440p</span>
+            <span class="chip-btn is-static">1080p</span>
           </div>
-          <p class="source">Planned: one queue, the same yt-dlp pipe the cutter already uses.</p>
+          <p class="source">Same yt-dlp binary the cutter already uses.</p>
         </div>
       </section>
     </div>
@@ -320,6 +311,6 @@
 </footer>
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
-<script src="/static/app.js?v=7"></script>
+<script src="/static/app.js?v=8"></script>
 </body>
 </html>

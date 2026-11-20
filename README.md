@@ -33,7 +33,15 @@ export NEXCUT_MODELS=gemini-2.5-flash,gemini-2.5-pro
 python3 -m nexcut.server
 ```
 
-Your key is typed in the app, used for that run, and never stored on the server.
+Your key comes from the environment — nothing is typed into the browser:
+
+```bash
+export NEXCUT_PROVIDER=gemini
+export NEXCUT_API_KEY=...        # or put it in a .env you source before start
+```
+
+`NEXCUT_BACKUP_KEY` is the second key in the failover chain. The UI never sees or
+stores a key.
 
 ## Your prompt
 
@@ -61,7 +69,7 @@ settings. See `prompts/README.md`; start from `prompts/master.example.md`.
 
 ```bash
 python3 -m unittest discover -s tests -v      # 93 backend/contract tests
-npm install && npm run test:ui                # 25 UI assertions (jsdom, no browser)
+npm install && npm run test:ui                # 27 UI assertions (jsdom, no browser)
 ```
 
 The UI harness boots `web/index.html` + `web/app.js` against a stubbed API and
@@ -76,6 +84,6 @@ not do layout — see `docs/ui-plan.md` for what that means.
 `GET /api/video-quality/{id}` · `POST /api/jobs/{id}/cut` · `GET /api/cuts/{id}` ·
 `GET /api/cuts/{id}/file/{name}`
 
-Env: `NEXCUT_PROVIDER`, `NEXCUT_MODELS`, `NEXCUT_MODEL_MAP`, `NEXCUT_BACKUP_KEY`,
+Env: `NEXCUT_PROVIDER`, `NEXCUT_API_KEY`, `NEXCUT_MODELS`, `NEXCUT_MODEL_MAP`, `NEXCUT_BACKUP_KEY`,
 `NEXCUT_OPENAI_BASE`, `NEXCUT_PROMPT_DIR`, `NEXCUT_APPEND_CONTRACT`,
 `NEXCUT_INVITE_CODES`, `NEXCUT_OFFLINE`, `NEXCUT_PORT`.

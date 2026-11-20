@@ -282,6 +282,8 @@ class StubProvider:
 
 
 def make_provider(api_key: str = "") -> object:
+    # the browser no longer asks for a key: NEXCUT_API_KEY (or .env) wins
+    api_key = (api_key or os.environ.get("NEXCUT_API_KEY", "")).strip()
     kind = provider_kind()
     if kind == "gemini":
         return GeminiProvider(api_key)

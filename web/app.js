@@ -69,7 +69,8 @@ function icon(name) {
 
 function note(node, text, kind) {
   node.textContent = text;
-  node.className = "note" + (kind ? " " + kind : "");
+  node.classList.remove("ok", "bad", "warn");
+  if (kind) node.classList.add(kind);
 }
 
 function toast(message) {
@@ -86,7 +87,11 @@ function copy(text) {
 }
 
 const PANES = ["landingPane", "progressPane", "errorPane", "resultsPane"];
-const showPane = (id) => PANES.forEach((p) => { if ($(p)) $(p).hidden = p !== id; });
+const SIDE = { landingPane: "Link intake", progressPane: "Working", errorPane: "Stopped", resultsPane: "Clips" };
+const showPane = (id) => PANES.forEach((p) => {
+  if ($(p)) $(p).hidden = p !== id;
+  if (p === id && $("sideLabel")) $("sideLabel").textContent = SIDE[id] || "";
+});
 
 function drawer(id, open) {
   const node = $(id);
@@ -118,22 +123,10 @@ async function boot() {
   }
   S.tools = S.cfg.tools || { can_cut: false, hints: {} };
 
-  const stub = S.cfg.provider === "stub";
-  const master = !!(S.cfg.prompt && S.cfg.prompt.master_loaded);
-
-  $("providerText").textContent = stub ? "demo provider" : S.cfg.provider || "provider";
-  $("promptText").textContent = master ? "master.md" : "built-in prompt";
-  $("toolsText").textContent = S.tools.can_cut ? "cutting ready" : "cutting unavailable";
-  $("stateDot").className = "dot " + (stub ? "" : "ok");
-  $("toolsText").style.color = S.tools.can_cut ? "" : "var(--text-4)";
-
-  note($("providerNote"), stub
-    ? "Offline demo — any key works, nothing is sent."
-    : "Key is sent to the provider for this run only.");
+  $("buildTag").textContent = S.cfg.version ? String(S.cfg.version) : "";
 
   buildControls();
   wire();
-  restoreKey();
   updateCounts();
   renderSummary();
   renderHistory();
@@ -235,20 +228,6 @@ function wire() {
   $("uploadBtn").onclick = () => $("fileInput").click();
   $("fileInput").onchange = uploadFile;
 
-  $("showKey").onclick = () => {
-    const field = $("apiKey");
-    const hidden = field.type === "password";
-    field.type = hidden ? "text" : "password";
-    $("showKey").textContent = hidden ? "Hide" : "Show";
-  };
-  $("apiKey").addEventListener("input", () => {
-    if ($("rememberKey").checked) localStorage.setItem("saa_key", $("apiKey").value);
-  });
-  $("rememberKey").onchange = () => {
-    if ($("rememberKey").checked) localStorage.setItem("saa_key", $("apiKey").value);
-    else localStorage.removeItem("saa_key");
-  };
-
   $("windowSel").addEventListener("change", () => {
     const custom = $("windowSel").value === "E";
     $("customMinWrap").hidden = !custom;
@@ -270,15 +249,6 @@ function wire() {
     const btn = e.target.closest("button[data-view]");
     if (btn) setView(btn.dataset.view);
   });
-
-  $("toolsText").style.cursor = "help";
-  $("toolsText").onclick = () => {
-    const hints = S.tools.hints || {};
-    const msg = S.tools.can_cut
-      ? "ffmpeg and yt-dlp detected."
-      : [hints.ffmpeg, hints.yt_dlp].filter(Boolean).join(" ") || "Cutting unavailable";
-    toast(msg);
-  };
 
   document.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-copy]");
@@ -321,13 +291,6 @@ function setThemeIcon() {
   const light = document.body.classList.contains("light");
   $("themeBtn").innerHTML = "";
   $("themeBtn").appendChild(icon(light ? "sun" : "moon"));
-}
-
-function restoreKey() {
-  const key = localStorage.getItem("saa_key");
-  if (!key) return;
-  $("apiKey").value = key;
-  $("rememberKey").checked = true;
 }
 
 function updateCounts() {
@@ -390,7 +353,6 @@ function renderSummary() {
     ["niche", nicheValue()],
     ["clips", $("numClips").value],
     ["length", length ? length.textContent : ""],
-    ["audience", $("audienceSel").value],
     ["model", $("modelSel").value],
   ].forEach(([k, v]) => {
     if (!v) return;
@@ -470,7 +432,7 @@ function readPayload() {
     model: $("modelSel").value,
     cascade: $("cascadeToggle").checked,
     already_extracted: "",
-    api_key: $("apiKey").value.trim(),
+    api_key: "",
   };
 }
 
@@ -575,7 +537,7 @@ function renderResults(data, payload, job) {
     data.model_used ? `model ${data.model_used}` : "",
     data.ranges_planned ? `coverage ${data.ranges_planned}` : "",
     job && job.elapsed_s ? `${job.elapsed_s}s` : "",
-  ].filter(Boolean).join("  ·  ");
+  ].filter(Boolean).join("   ·   ");
 
   $("statCandidates").textContent = (data.sweep && data.sweep.longlist) || (data.longlist || []).length;
   $("statKept").textContent = clips.length;
@@ -589,15 +551,25 @@ function renderResults(data, payload, job) {
   clips.forEach((clip, index) => {
     const tr = el("tr");
     tr.setAttribute("aria-selected", index === 0 ? "true" : "false");
-    tr.appendChild(el("td", "c-n", clip.n));
-    tr.appendChild(el("td", "c-t", clip.start_stamp || hms(clip.start_sec)));
-    tr.appendChild(el("td", "c-t", clip.end_stamp || hms(clip.end_sec)));
-    tr.appendChild(el("td", "c-d", clip.duration_str || ""));
+
+    const num = el("td", "c-n");
+    num.appendChild(el("b", null, clip.n));
+    tr.appendChild(num);
+
+    const cell = el("td");
+    const inner = el("div", "clip-cell");
+    inner.appendChild(el("div", "clip-time",
+      `${clip.start_stamp || hms(clip.start_sec)} → ${clip.end_stamp || hms(clip.end_sec)}`));
+    inner.appendChild(el("div", "clip-hook", clip.hook_summary || clip.verbal_hook || "—"));
+    cell.appendChild(inner);
+    tr.appendChild(cell);
+
+    tr.appendChild(el("td", "c-d cell-mono", clip.duration_str || ""));
     const scoreCell = el("td", "c-s");
     const avg = clip.scores && clip.scores.avg;
     scoreCell.appendChild(el("span", "score" + (avg >= 8 ? " hi" : ""), avg == null ? "—" : avg));
     tr.appendChild(scoreCell);
-    tr.appendChild(el("td", "hook", clip.hook_summary || ""));
+
     tr.onclick = () => selectClip(index);
     rows.appendChild(tr);
   });
@@ -620,6 +592,32 @@ function renderResults(data, payload, job) {
   setupExport(data);
 }
 
+function block(label, text, opts = {}) {
+  if (text === undefined || text === null || String(text).trim() === "") return null;
+  const wrap = el("div", "dblock");
+  const key = el("div", "k");
+  key.appendChild(document.createTextNode(label));
+  if (opts.copy) {
+    const btn = el("button", "copy", "copy");
+    btn.type = "button";
+    btn.dataset.copy = String(text);
+    key.appendChild(btn);
+  }
+  wrap.appendChild(key);
+  const value = el("div", "v" + (opts.strong ? " strong" : "") + (opts.quote ? " quote" : ""), text);
+  wrap.appendChild(value);
+  return wrap;
+}
+
+function section(title, children) {
+  const parts = children.filter(Boolean);
+  if (!parts.length) return null;
+  const sec = el("section", "dsec");
+  sec.appendChild(el("h4", null, title));
+  parts.forEach((n) => sec.appendChild(n));
+  return sec;
+}
+
 function selectClip(index) {
   const clips = (S.result && S.result.clips) || [];
   const clip = clips[index];
@@ -629,71 +627,94 @@ function selectClip(index) {
     tr.setAttribute("aria-selected", i === index ? "true" : "false");
   });
 
+  const body = $("inspBody");
+  body.textContent = "";
+
+  const avg = clip && clip.scores ? clip.scores.avg : null;
   $("inspTitle").textContent = clip ? `Clip ${clip.n}` : "No clip selected";
   $("inspTime").textContent = clip
     ? `${clip.start_stamp || hms(clip.start_sec)} → ${clip.end_stamp || hms(clip.end_sec)}`
     : "";
+  $("inspScore").textContent = avg == null ? "" : avg;
+  $("inspScore").className = "score-lg" + (avg >= 8 ? " hi" : "");
 
-  const body = $("inspBody");
-  body.textContent = "";
+  const link = $("clipLink");
+  if (clip && S.result && S.result.video_id) {
+    const t = Math.max(0, Math.round(clip.start_sec || 0));
+    link.href = `https://youtu.be/${S.result.video_id}?t=${t}`;
+    link.hidden = false;
+  } else {
+    link.hidden = true;
+  }
+
   if (!clip) {
     body.appendChild(el("p", "note pad", "Select a clip."));
     return;
   }
 
-  const scores = el("div", "scores");
-  Object.entries(clip.scores || {}).forEach(([k, v]) => {
-    if (v == null) return;
-    scores.appendChild(el("span", k === "avg" ? "hi" : "", `${k} ${v}`));
-  });
-  if (scores.children.length) body.appendChild(row("scores", scores, true));
-
-  const t = clip.titles || {};
+  /* timing */
+  const grid = el("div", "dgrid");
   [
-    ["opens", `[${clip.start_stamp}] ${clip.start_sentence}`, true, clip.start_sentence],
-    ["ends", `[${clip.end_stamp}] ${clip.end_sentence}`, true, clip.end_sentence],
-    ["length", `${clip.duration_str || ""}${clip.duration_line ? " · " + clip.duration_line : ""}`],
-    ["clickbait", t.clickbait, false, t.clickbait],
-    ["search", t.search, false, t.search],
-    ["debate", t.debate, false, t.debate],
-    ["verbal hook", clip.verbal_hook, false, clip.verbal_hook],
-    ["why", clip.why_it_works],
-    ["share", clip.share_trigger],
-    ["overlays", (clip.overlays || []).map((o) => `${o.offset}  ${o.text}`).join("\n"), true],
-    ["sfx", clip.sfx],
-    ["captions", clip.captions],
-    ["upload text", clip.upload_caption, false, clip.upload_caption],
-    ["hashtags", clip.hashtags, true, clip.hashtags],
-    ["pinned", clip.pinned_comment, false, clip.pinned_comment],
-    ["safety", clip.safety && String(clip.safety).toLowerCase() !== "none" ? clip.safety : ""],
-  ].forEach(([k, v, mono, copyText]) => {
-    const node = row(k, v, mono, copyText);
-    if (node) body.appendChild(node);
+    ["In", clip.start_stamp || hms(clip.start_sec)],
+    ["Out", clip.end_stamp || hms(clip.end_sec)],
+    ["Length", clip.duration_str || "—"],
+  ].forEach(([k, v]) => {
+    const cell = el("div", "dcell");
+    cell.appendChild(el("div", "k", k));
+    cell.appendChild(el("div", "v", v));
+    grid.appendChild(cell);
   });
-}
 
-function row(key, value, mono, copyText) {
-  if (value === undefined || value === null || value === "") return null;
-  const line = el("div", "irow");
-  line.appendChild(el("div", "k", key));
+  /* scores */
+  const scoreRows = Object.entries(clip.scores || {})
+    .filter(([k, v]) => k !== "avg" && typeof v === "number")
+    .map(([k, v]) => {
+      const row = el("div", "srow");
+      row.appendChild(el("div", "k", k));
+      const track = el("div", "track");
+      const fill = el("i");
+      fill.style.width = `${Math.max(0, Math.min(100, v * 10))}%`;
+      track.appendChild(fill);
+      row.appendChild(track);
+      row.appendChild(el("div", "v", v));
+      return row;
+    });
 
-  if (value instanceof Node) {
-    const cell = el("div", "v");
-    cell.appendChild(value);
-    line.appendChild(cell);
-    return line;
-  }
+  const titles = clip.titles || {};
+  const post = [
+    block("upload text", clip.upload_caption, { copy: true }),
+    block("hashtags", clip.hashtags, { copy: true }),
+    block("pinned comment", clip.pinned_comment, { copy: true }),
+    clip.safety && String(clip.safety).toLowerCase() !== "none"
+      ? block("safety", clip.safety, { strong: true }) : null,
+  ];
 
-  const cell = el("div", "v" + (mono ? " mono" : ""));
-  cell.appendChild(document.createTextNode(String(value)));
-  if (copyText) {
-    const btn = el("button", "copy", "copy");
-    btn.type = "button";
-    btn.dataset.copy = copyText;
-    cell.appendChild(btn);
-  }
-  line.appendChild(cell);
-  return line;
+  [
+    section("Timing", [grid]),
+    section("Scores", scoreRows),
+    section("Titles", [
+      block("clickbait", titles.clickbait, { copy: true, strong: true }),
+      block("search", titles.search, { copy: true }),
+      block("debate", titles.debate, { copy: true }),
+    ]),
+    section("Dialogue", [
+      block("opens", clip.start_sentence, { quote: true }),
+      block("ends", clip.end_sentence, { quote: true }),
+    ]),
+    section("Why it works", [
+      block("reason", clip.why_it_works, { strong: true }),
+      block("share trigger", clip.share_trigger),
+      block("verbal hook", clip.verbal_hook),
+    ]),
+    section("On screen", [
+      block("overlays", (clip.overlays || []).map((o) => `${o.offset}   ${o.text}`).join("\n")),
+      block("sfx", clip.sfx),
+      block("captions", clip.captions),
+    ]),
+    section("Post", post),
+  ].forEach((node) => { if (node) body.appendChild(node); });
+
+  if (!body.children.length) body.appendChild(el("p", "note pad", "Nothing else for this clip."));
 }
 
 function setView(view) {
@@ -713,6 +734,7 @@ function setupExport(data) {
   $("cutBtn").disabled = !canCut;
   $("fileList").textContent = "";
   $("cutFill").style.width = "0%";
+  $("cutTrack").hidden = true;
   $("exportQuality").textContent = "";
   const sel = $("qualitySel");
 
@@ -761,6 +783,7 @@ async function startCut() {
   $("cutBtn").disabled = true;
   $("fileList").textContent = "";
   $("cutFill").style.width = "0%";
+  $("cutTrack").hidden = false;
   note($("cutState"), "Downloading source…");
 
   try {

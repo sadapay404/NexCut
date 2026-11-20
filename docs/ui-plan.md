@@ -1,80 +1,65 @@
-# UI plan — v6 (reference-led rebuild)
+# UI plan — v7
 
-## What changed and why
+## What the user rejected, and the fix
 
-v5 was a dense cockpit. That was the wrong genre. The reference the user supplied
-is a **framed hero**: wordmark left, two tabs centre, one link bar, everything
-inside a single rounded panel with corner labels and a credits line. v6 adopts
-that composition — not the reference's markup, copy or colours, its structure.
+| Complaint | Cause | Fix |
+|---|---|---|
+| "Same link, same key. Video or audio, at the quality you pick." | a tagline I wrote on the Downloader tab | deleted; the tab now shows only the heading, the disabled bar, the format pills and one factual line |
+| "demo provider · built-in prompt · cutting unavailable" in the card corner | three status pills carried over from the cockpit design | deleted. The corner now shows `v0.1.0`. Missing ffmpeg is reported in the export strip, where it stops you, not as chrome |
+| "Don't ask for API key — it comes from .env" | the key field was in Options | field, Show/Hide and Remember are gone. The server reads `NEXCUT_API_KEY` (payload key still wins if one is ever sent) |
+| "Results were unreadable, everything cluttered" | 6-column table of 11.5px text + a 342px rail with 16 tiny label/value rows | results rebuilt: 4-column table with a 13px hook line, a 404px detail rail grouped into 7 titled sections, and a full-width cut strip |
 
-| Reference element | NexCut v6 |
-|---|---|
-| `NEXUS / DOWNLOADER` wordmark | `NEX**CUT** / Clip Studio` — NEX in ink, CUT in gold |
-| Centred nav pills | `Cutter` · `Downloader` with a `soon` badge |
-| `SIDE A — LINK INTAKE` corner label | same, plus live provider / prompt / cutting state on the right |
-| Display heading with one italic word | `Sheikh Arsalan` + italic gold `Automation` |
-| One-line tagline | replaced with mechanics: "Paste a YouTube link. Captions, model pass, rule check and the cut run on this machine." |
-| Standard / Batch toggle | removed — there is nothing to toggle until batch exists |
-| One URL bar with the action inside | one URL bar, `Extract` inside, `⌘↵` hint |
-| Micro chips under the bar | `Options` `Transcript` `Sample` `History` — each opens a drawer |
-| Bottom microcopy | live source line: `No source` → `Fetching captions…` → `Captions ready — auto · 214 lines · 12:04` |
-| Credits line | `Proudly created by Sheikh Arsalan in collaboration with Mubashir` |
+## Results screen, in detail
 
-## Composition rules
+**Table** — `#`, `Clip`, `Length`, `Score`. The clip cell carries the range in mono
+(`00:00:08 → 00:01:03`) above the hook in 13px body text, so each row is one thing
+to read, not six. Rows are 54px tall; five clips fit a 600px frame, longer lists
+scroll under a sticky header.
 
-- **One panel.** The stage is a single card, `min(1180px, 100%)` wide, capped at
-  660px tall, centred in a grid. Top bar 58px, credits 34px (52/30 under 700px tall).
-- **Nothing lives outside the card.** Progress, errors and results all render
-  inside the same frame, so the composition never collapses.
-- **Progressive disclosure.** Niche, audience, language, length, clips, model and
-  key sit in an `Options` drawer. Transcript and history have their own drawers.
-  Closed by default; the landing stays a hero.
-- **Result state** replaces the hero with `Result` header, stats strip, clip table
-  and a fixed inspector/export rail inside the same card. At 600px the table still
-  shows ~12 rows.
-- **Type.** Sans for the chrome, one serif italic word for the gold accent, mono
-  for every number, timestamp and micro-label. No icon fonts, no web fonts, no CDN.
-- **Decoration is one layer.** A soft warm radial plus concentric grooves at 4–7%
-  opacity, under `pointer-events: none`, dimmed in the light theme.
+**Detail rail** — header (`Clip n`, range, `Open` → the moment on YouTube, score
+badge), then titled sections, each omitted when empty:
+
+1. Timing — In / Out / Length as three cells
+2. Scores — one bar per dimension with the number
+3. Titles — clickbait, search, debate, each copyable
+4. Dialogue — the opening and closing line, quoted
+5. Why it works — reason, share trigger, verbal hook
+6. On screen — overlays, sfx, captions
+7. Post — upload text, hashtags, pinned comment, safety
+
+Body text is 12.5px with 1.55 line-height; labels are 9px caps, used once per
+section instead of once per row.
+
+**Cut strip** — full width under both panes: `Cut` label, quality select, `Cut MP4s`,
+a progress track that appears only while cutting, the state line, and the produced
+files as chips with a `save` link.
+
+## Composition (unchanged from v6)
+
+Wordmark · `Cutter / Downloader` tabs · one framed card · `Side A — Link intake`
+corner label with the live state word (`Link intake` → `Working` → `Clips`) ·
+hero heading with one italic gold word · one link bar with `Extract` inside ·
+`Options` `Transcript` `Sample` `History` drawers · credits line.
+
+At 1366 × 600: top bar 52, credits 30, card 496 tall, results body 315 → 5 table
+rows, detail rail scrolls, cut strip 47.
 
 ## Verified
 
-| Check | Command | Result |
-|---|---|---|
-| Boot, drawers, tab switch, full run, cut, back to landing | `node tools/ui_smoke.js` | 25 assertions pass |
-| Backend | `python3 -m unittest discover -s tests` | 93 pass |
-| Structure | id/class/CSS audit | 100 ids, no duplicates, every JS id exists, every class has a rule, braces balanced |
-| Serving | `curl` `/`, `/static/style.css?v=7`, `/static/app.js?v=7` | 200 |
+| Check | Result |
+|---|---|
+| `node tools/ui_smoke.js` | 27 assertions pass — boot, drawers, tab switch, captions, run, 4-column rows, 7 detail sections, 4 score bars, clip link, cut, files, back to landing |
+| `python3 -m unittest discover -s tests` | 93 pass |
+| id / class / CSS audit | 94 ids, no duplicates, every JS id exists, every class has a rule, braces balanced |
+| `curl` on `/`, CSS, JS | 200, `no-cache`, `?v=8` |
 
-Not verified: pixels. There is no browser in this sandbox and Playwright's
-Chromium download is blocked, so the preview must be judged by eye.
+Pixels remain unverified here: no browser in the sandbox (Playwright's download is
+blocked, and a bundled Chromium needs `libnss3`, which this image lacks and cannot
+install without root).
 
-## Phases
+## Next
 
-**Phase 1 — this card.** Landing, drawers, progress, results, export rail,
-Downloader placeholder, credits. Done.
-
-**Phase 2 — result workspace.** Sortable columns, score filter, rejection reasons
-as a filter, `youtu.be/<id>?t=<start>` links, copy-all titles, ZIP of all cuts
-(stdlib `zipfile`).
-
-**Phase 3 — cutting queue.** Per-clip cut from the inspector, per-file progress,
-quality picker with estimated size, retention panel for `data/source` and
-`data/cuts`.
-
-**Phase 4 — Downloader.** Real second tab: video / audio, quality list from
-`/api/video-quality`, one queue, same yt-dlp pipe. It shares the key field and the
-history, so the card composition does not change.
-
-**Phase 5 — real-run hardening.** Real key, real video, every failure class has a
-written message; confirm the MP4 starts on the requested frame; test a ≥ 60-minute
-source.
-
-## Rules
-
-1. No UI change ships without `node tools/ui_smoke.js` passing.
-2. Design at 1366 × 600 first.
-3. Labels, units, states — no marketing copy.
-4. One accent, one decoration layer.
-5. A disabled control says why.
-6. Every error names the failure and the next action.
+1. Multi-clip cutting: per-clip button in the detail rail, queue, ZIP of all cuts.
+2. Sort/filter on the table (score, length) once lists exceed one screen.
+3. Downloader tab: video / audio, quality from `/api/video-quality`, same queue.
+4. Real run with an env key: confirm the MP4 starts on the requested frame.
