@@ -281,6 +281,34 @@ def _pick_track(tracks: list[dict], preferred: str = "en") -> dict | None:
     return sorted(tracks, key=score)[0] if tracks else None
 
 
+def inspect_innertube(vid: str, language: str = "en") -> list[dict]:
+    """What each client identity actually answered — for diagnostics, not for runs."""
+    report: list[dict] = []
+    for client in INNERTUBE_CLIENTS:
+        entry = {"client": client["id"], "status": "", "reason": "", "tracks": 0,
+                 "lines": 0, "format": "", "error": ""}
+        try:
+            url, headers = player_request(client)
+            player = _post_json(url, {"context": client["context"], "videoId": vid,
+                                      "contentCheckOk": True, "racyCheckOk": True},
+                                headers=headers)
+            info = read_player_response(player)
+            entry["status"] = info["status"]
+            entry["reason"] = info["reason"]
+            entry["tracks"] = len(info["tracks"])
+            track = _pick_track(info["tracks"], language)
+            if track:
+                lines, fmt = fetch_track_lines(client, track["baseUrl"])
+                entry["lines"], entry["format"] = len(lines), fmt
+        except IngestError as exc:
+            entry["error"] = str(exc)
+            entry["reason"] = entry["reason"] or (exc.hint or "")[:160]
+        except Exception as exc:  # noqa: BLE001 - diagnostics never raise
+            entry["error"] = f"{type(exc).__name__}: {exc}"
+        report.append(entry)
+    return report
+
+
 def cookie_path() -> str:
     """Same rule as the cutter: NEXCUT_COOKIES, else ./cookies.txt if it exists."""
     raw = os.environ.get("NEXCUT_COOKIES", "").strip()
@@ -622,6 +650,17 @@ def _via_transcript_api(vid: str, language: str) -> Transcript:
 CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "cache"
 
 
+# (label, function) — the labels appear in error messages, so they are fixed here
+# rather than derived from function names.
+STRATEGIES: tuple[tuple[str, str], ...] = (
+    ("innertube", "_via_innertube"),
+    ("timedtext", "_via_timedtext"),
+    ("watch-page", "_via_watch_page"),
+    ("yt-dlp", "_via_ytdlp"),
+    ("transcript-api", "_via_transcript_api"),
+)
+
+
 def fetch_transcript(url_or_id: str, *, language: str = "en", use_cache: bool = True) -> Transcript:
     if os.environ.get("NEXCUT_OFFLINE") == "1":
         raise IngestError(
@@ -645,16 +684,24 @@ def fetch_transcript(url_or_id: str, *, language: str = "en", use_cache: bool = 
             pass
 
     errors: list[str] = []
-    for strategy in (_via_innertube, _via_timedtext, _via_watch_page,
-                     _via_ytdlp, _via_transcript_api):
+    for name, attribute in STRATEGIES:
+        strategy = globals()[attribute]     # resolved per call, so it stays swappable
         try:
             tr = strategy(vid, language)
         except IngestError as exc:
-            errors.append(f"{strategy.__name__.replace('_via_', '')}: {exc}")
+            # keep the strategy's own diagnostics: that is where the reason lives
+            detail = str(exc) + (f" — {exc.hint}" if exc.hint else "")
+            errors.append(f"{name}: {detail}")
             continue
-        meta = fetch_metadata(vid)
-        tr.title = meta["title"]
-        tr.channel = meta["channel"]
+        except Exception as exc:  # noqa: BLE001 - one broken strategy must not stop the run
+            errors.append(f"{name}: {type(exc).__name__}: {exc}")
+            continue
+        try:
+            meta = fetch_metadata(vid)
+            tr.title = tr.title or meta["title"]
+            tr.channel = tr.channel or meta["channel"]
+        except (IngestError, KeyError, TypeError):
+            pass
         if tr.lines:
             CACHE_DIR.mkdir(parents=True, exist_ok=True)
             cache.write_text(json.dumps({
@@ -664,7 +711,10 @@ def fetch_transcript(url_or_id: str, *, language: str = "en", use_cache: bool = 
             }))
         return tr
 
+    hint = "Tried: " + " | ".join(errors)
+    if len(hint) > 900:
+        hint = hint[:900] + " …"
     raise IngestError(
         "Could not get captions for this video by any method.",
-        "Tried: " + " | ".join(errors[:3]) + " — paste the transcript manually if this keeps happening.",
+        hint + " — paste the transcript, or add cookies.txt and retry.",
     )
