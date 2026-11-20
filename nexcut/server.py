@@ -20,6 +20,7 @@ import mimetypes
 import os
 import re
 import time
+import traceback
 import zipfile
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -157,7 +158,12 @@ def key_status() -> tuple[int, dict]:
                     "so .env is read again.")
         return 502, {"ok": False, "detail": str(exc), "hint": hint}
     except Exception as exc:  # noqa: BLE001 - report, never 500 the check
-        return 502, {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+        where = ""
+        tb = traceback.extract_tb(exc.__traceback__)
+        if tb:
+            last = tb[-1]
+            where = f" [{'/'.join(Path(last.filename).parts[-2:])}:{last.lineno}]"
+        return 502, {"ok": False, "detail": f"{type(exc).__name__}: {exc}{where}"}
     return 200, {"ok": True, "provider": getattr(provider, "name", "?"), "model": used,
                  "ms": int((time.monotonic() - started) * 1000),
                  "reply": (text or "").strip()[:60]}

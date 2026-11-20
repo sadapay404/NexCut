@@ -87,7 +87,7 @@ class _HttpProvider:
     def _attempt(self, model: str, system: str, user: str, key: str) -> str:
         raise NotImplementedError
 
-    def _post(self, url: str, body: dict, headers: dict) -> dict:
+    def _post(self, url: str, body: dict, headers: dict, *, label: str = "the model") -> dict:
         req = urllib.request.Request(
             url, data=json.dumps(body).encode(), method="POST",
             headers={"Content-Type": "application/json", **headers},
@@ -101,14 +101,17 @@ class _HttpProvider:
             detail = exc.read().decode()[:400]
             if exc.code in (429, 500, 502, 503, 504):
                 raise ProviderError(
-                    f"{model} was unavailable (HTTP {exc.code}).", retryable=True
+                    f"{label} was unavailable (HTTP {exc.code}).", retryable=True
                 ) from exc
             if exc.code in (401, 403):
                 raise ProviderError(
                     "That API key was rejected. Check it was copied fully and is enabled."
                 ) from exc
             if exc.code == 404:
-                raise ProviderError(f"{model} was not found at this provider: {detail}") from exc
+                raise ProviderError(
+                    f"{label} was not found at this provider: {detail}",
+                    hint="Set NEXCUT_MODELS to a model your key can use, then restart.",
+                ) from exc
             raise ProviderError(f"Provider error {exc.code}: {detail}") from exc
         except urllib.error.URLError as exc:
             raise ProviderError(f"Could not reach the model provider: {exc.reason}") from exc
@@ -157,7 +160,8 @@ class GeminiProvider(_HttpProvider):
         }
         url = GEMINI_ENDPOINT.format(model=resolve_model(model))
         # ?key= for older keys, header for the newer AQ.… AI Studio keys: send both
-        payload = self._post(url + f"?key={key}", body, {"x-goog-api-key": key})
+        payload = self._post(url + f"?key={key}", body, {"x-goog-api-key": key},
+                             label=resolve_model(model))
         try:
             parts = payload["candidates"][0]["content"]["parts"]
             text = "".join(p.get("text", "") for p in parts)
@@ -190,7 +194,7 @@ class OpenAIProvider(_HttpProvider):
         }
         payload = self._post(
             OPENAI_ENDPOINT.format(base=self.base), body,
-            {"Authorization": f"Bearer {key}"},
+            {"Authorization": f"Bearer {key}"}, label=model,
         )
         try:
             text = payload["choices"][0]["message"]["content"] or ""

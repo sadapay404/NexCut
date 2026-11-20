@@ -71,7 +71,7 @@ settings. See `prompts/README.md`; start from `prompts/master.example.md`.
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests -v      # 124 backend/contract tests
+python3 -m unittest discover -s tests -v      # 136 backend/contract tests
 npm install && npm run test:ui                # 36 UI assertions (jsdom, no browser)
 ```
 
