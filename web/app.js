@@ -1,6 +1,7 @@
-/* SAA Clip Studio — client.
-   Plain DOM. Model output is written with textContent only.
-   Every render path is wrapped so a bad payload shows a readable error card. */
+/* NexCut — client.
+   Plain DOM, no framework, no build step. Model output is written with
+   textContent only; every render path is guarded so a bad payload shows a
+   readable failure card instead of a blank screen. */
 "use strict";
 
 const $ = (id) => document.getElementById(id);
@@ -24,6 +25,7 @@ const S = {
   payload: null,
   selected: 0,
   view: "clips",
+  mode: "cutter",
   caption: { state: "idle", detail: "No link" },
   timers: { fetch: null, poll: null, cut: null },
 };
@@ -70,20 +72,10 @@ function note(node, text, kind) {
   node.className = "note" + (kind ? " " + kind : "");
 }
 
-function pill(wrap, textNode, text, kind) {
-  textNode.textContent = text;
-  wrap.className = "pill" + (kind ? " " + kind : "");
-}
-
-function status(main, detail) {
-  $("statusText").textContent = main;
-  $("statusHint").textContent = detail || "";
-}
-
 function toast(message) {
   const node = el("div", "toast", message);
   $("toasts").appendChild(node);
-  setTimeout(() => node.remove(), 1800);
+  setTimeout(() => node.remove(), 1900);
 }
 
 function copy(text) {
@@ -91,6 +83,24 @@ function copy(text) {
     () => toast("Copied"),
     () => toast("Copy blocked")
   );
+}
+
+const PANES = ["landingPane", "progressPane", "errorPane", "resultsPane"];
+const showPane = (id) => PANES.forEach((p) => { if ($(p)) $(p).hidden = p !== id; });
+
+function drawer(id, open) {
+  const node = $(id);
+  if (!node) return;
+  const next = open === undefined ? node.hidden : open;
+  node.hidden = !next;
+  const btn = { optionsPanel: "optionsToggle", transcriptPanel: "transcriptToggle", historyPanel: "historyToggle" }[id];
+  if (btn && $(btn)) $(btn).setAttribute("aria-expanded", next ? "true" : "false");
+}
+
+function closeDrawers() {
+  drawer("optionsPanel", false);
+  drawer("transcriptPanel", false);
+  drawer("historyPanel", false);
 }
 
 /* ── boot ────────────────────────────────────────────── */
@@ -103,30 +113,31 @@ async function boot() {
   try {
     S.cfg = await api("/api/config");
   } catch (e) {
-    renderError("Server unreachable", e.message, "Start the studio: python3 -m nexcut.server");
+    renderError("Server unreachable", e.message, "Start it with: python3 -m nexcut.server");
     return;
   }
   S.tools = S.cfg.tools || { can_cut: false, hints: {} };
 
   const stub = S.cfg.provider === "stub";
-  pill($("providerBadge"), $("providerText"), stub ? "demo" : S.cfg.provider, stub ? "warn" : "ok");
   const master = !!(S.cfg.prompt && S.cfg.prompt.master_loaded);
-  pill($("promptBadge"), $("promptText"), master ? "master.md" : "built-in", master ? "ok" : "warn");
-  pill($("toolsBadge"), $("toolsText"), S.tools.can_cut ? "ready" : "unavailable",
-    S.tools.can_cut ? "ok" : "bad");
 
-  $("statusProvider").textContent = S.cfg.provider || "";
-  $("statusVersion").textContent = S.cfg.version || "";
+  $("providerText").textContent = stub ? "demo provider" : S.cfg.provider || "provider";
+  $("promptText").textContent = master ? "master.md" : "built-in prompt";
+  $("toolsText").textContent = S.tools.can_cut ? "cutting ready" : "cutting unavailable";
+  $("stateDot").className = "dot " + (stub ? "" : "ok");
+  $("toolsText").style.color = S.tools.can_cut ? "" : "var(--text-4)";
+
   note($("providerNote"), stub
-    ? "Offline demo — no key required."
-    : "Key is used for this run only.");
+    ? "Offline demo — any key works, nothing is sent."
+    : "Key is sent to the provider for this run only.");
 
   buildControls();
   wire();
   restoreKey();
   updateCounts();
-  renderDashboard();
-  status("Ready", master ? "prompt: master.md" : "prompt: built-in");
+  renderSummary();
+  renderHistory();
+  showPane("landingPane");
 }
 
 function buildControls() {
@@ -138,7 +149,7 @@ function buildControls() {
   (S.cfg.languages || []).forEach((x) => $("langSel").appendChild(new Option(x, x)));
   (S.cfg.models || []).forEach((x) => $("modelSel").appendChild(new Option(x.label || x.id, x.id)));
 
-  // shorten "Option E: 45s–5m25s (Oracle Wide Range - default)" -> "45s–5m25s"
+  // "Option E: 45s–5m25s (wide range — default)" -> "45s–5m25s"
   (S.cfg.windows || []).forEach((w) => {
     const full = String(w.label || w.id);
     const label = full
@@ -178,9 +189,18 @@ function wire() {
     setThemeIcon();
   };
 
-  $("nicheSel").onchange = () => { fillSubs($("nicheSel").value); renderDashboard(); };
+  $("modeTabs").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-mode]");
+    if (btn) setMode(btn.dataset.mode);
+  });
+
+  $("optionsToggle").onclick = () => drawer("optionsPanel");
+  $("transcriptToggle").onclick = () => drawer("transcriptPanel");
+  $("historyToggle").onclick = () => { renderHistory(); drawer("historyPanel"); };
+
+  $("nicheSel").onchange = () => { fillSubs($("nicheSel").value); renderSummary(); };
   ["subSel", "audienceSel", "langSel", "numClips", "windowSel", "modelSel"].forEach((id) => {
-    $(id).addEventListener("change", renderDashboard);
+    $(id).addEventListener("change", renderSummary);
   });
 
   $("ytUrl").addEventListener("input", () => {
@@ -189,24 +209,27 @@ function wire() {
     if (!url) {
       S.caption = { state: "idle", detail: "No link" };
       note($("sourceState"), "No source");
-      renderDashboard();
+      renderSummary();
       return;
     }
     S.caption = { state: "fetching", detail: "Fetching captions…" };
     note($("sourceState"), "Fetching captions…");
-    renderDashboard();
+    renderSummary();
     S.timers.fetch = setTimeout(() => fetchCaptions(url), 700);
   });
+  $("ytUrl").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); run(); }
+  });
 
-  $("transcript").addEventListener("input", () => { updateCounts(); renderDashboard(); });
+  $("transcript").addEventListener("input", () => { updateCounts(); renderSummary(); });
 
   $("sampleBtn").onclick = () => {
     $("transcript").value = SAMPLE;
-    $("transcriptFold").open = true;
+    drawer("transcriptPanel", true);
     updateCounts();
     S.caption = { state: "ready", detail: "Sample transcript" };
-    note($("sourceState"), "Sample transcript loaded", "ok");
-    renderDashboard();
+    note($("sourceState"), "Sample transcript loaded — 10 lines", "ok");
+    renderSummary();
   };
 
   $("uploadBtn").onclick = () => $("fileInput").click();
@@ -220,7 +243,6 @@ function wire() {
   };
   $("apiKey").addEventListener("input", () => {
     if ($("rememberKey").checked) localStorage.setItem("saa_key", $("apiKey").value);
-    renderDashboard();
   });
   $("rememberKey").onchange = () => {
     if ($("rememberKey").checked) localStorage.setItem("saa_key", $("apiKey").value);
@@ -235,22 +257,27 @@ function wire() {
 
   $("runBtn").onclick = run;
   $("cutBtn").onclick = startCut;
-  $("newRunBtn").onclick = () => { showPane("emptyPane"); renderDashboard(); };
+  $("newRunBtn").onclick = () => {
+    showPane("landingPane");
+    renderSummary();
+    $("ytUrl").focus();
+  };
   $("copyJsonBtn").onclick = () => { if (S.result) copy(S.result.oracle_report || ""); };
   $("downloadBtn").onclick = downloadReport;
-  $("clearRecent").onclick = () => { localStorage.removeItem("saa_recent"); renderDashboard(); };
+  $("clearRecent").onclick = () => { localStorage.removeItem("saa_recent"); renderHistory(); renderSummary(); };
 
   $("segTabs").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-view]");
     if (btn) setView(btn.dataset.view);
   });
 
-  $("toolsBadge").onclick = () => {
+  $("toolsText").style.cursor = "help";
+  $("toolsText").onclick = () => {
     const hints = S.tools.hints || {};
     const msg = S.tools.can_cut
       ? "ffmpeg and yt-dlp detected."
-      : [hints.ffmpeg, hints.yt_dlp].filter(Boolean).join(" ");
-    toast(msg || "Cutting unavailable");
+      : [hints.ffmpeg, hints.yt_dlp].filter(Boolean).join(" ") || "Cutting unavailable";
+    toast(msg);
   };
 
   document.addEventListener("click", (e) => {
@@ -261,15 +288,16 @@ function wire() {
   document.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       e.preventDefault();
-      if (!$("runBtn").disabled) run();
+      if (!$("runBtn").disabled && S.mode === "cutter") run();
     }
-    if (e.key === "Escape" && !$("resultsPane").hidden) {
-      showPane("emptyPane");
-      renderDashboard();
+    if (e.key === "Escape") {
+      if ($("landingPane").hidden) {
+        showPane("landingPane");
+        renderSummary();
+      }
     }
   });
 
-  /* drop a transcript anywhere */
   ["dragover", "drop"].forEach((type) => {
     document.addEventListener(type, (e) => {
       e.preventDefault();
@@ -280,11 +308,19 @@ function wire() {
   });
 }
 
+function setMode(mode) {
+  S.mode = mode;
+  $("cutterPane").hidden = mode !== "cutter";
+  $("downloaderPane").hidden = mode !== "downloader";
+  Array.from($("modeTabs").children).forEach((btn) => {
+    btn.setAttribute("aria-selected", btn.dataset.mode === mode ? "true" : "false");
+  });
+}
+
 function setThemeIcon() {
   const light = document.body.classList.contains("light");
   $("themeBtn").innerHTML = "";
-  const svg = icon(light ? "sun" : "moon");
-  $("themeBtn").appendChild(svg);
+  $("themeBtn").appendChild(icon(light ? "sun" : "moon"));
 }
 
 function restoreKey() {
@@ -314,11 +350,11 @@ async function loadFile(file) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Upload failed");
     $("transcript").value = data.text;
-    $("transcriptFold").open = true;
+    drawer("transcriptPanel", true);
     updateCounts();
     S.caption = { state: "ready", detail: file.name };
     note($("sourceState"), `${file.name} — ${data.chars.toLocaleString()} characters`, "ok");
-    renderDashboard();
+    renderSummary();
   } catch (e) {
     note($("sourceState"), e.message, "bad");
   }
@@ -328,113 +364,41 @@ async function fetchCaptions(url) {
   try {
     const data = await api("/api/transcript", { method: "POST", body: JSON.stringify({ url }) });
     $("transcript").value = data.text;
-    $("transcriptFold").open = false;
+    drawer("transcriptPanel", false);
     updateCounts();
     S.caption = {
       state: "ready",
       detail: `${data.is_auto ? "auto" : "published"} · ${data.lines} lines · ${hms(data.seconds)}`,
     };
-    note($("sourceState"), S.caption.detail, "ok");
-    if (data.title) document.title = `${data.title} — Clip Studio`;
-    status("Captions ready", `${data.lines} lines`);
+    note($("sourceState"), `Captions ready — ${S.caption.detail}`, "ok");
+    if (data.title) document.title = `${data.title} — NexCut`;
   } catch (e) {
     S.caption = { state: "failed", detail: e.message };
     note($("sourceState"), [e.message, e.hint].filter(Boolean).join(" "), "bad");
-    $("transcriptFold").open = true;
-    status("Captions unavailable", e.message);
+    drawer("transcriptPanel", true);
   }
-  renderDashboard();
+  renderSummary();
 }
 
-/* ── dashboard ───────────────────────────────────────── */
-function renderDashboard() {
-  const niche = nicheValue();
-  const model = $("modelSel").value;
+/* ── summary chips + history ─────────────────────────── */
+function renderSummary() {
+  if (!S.cfg) return;
   const length = $("windowSel").selectedOptions[0];
-  const stamps = ($("transcript").value.match(/^\s*\[?\d{1,2}:\d{2}/gm) || []).length;
-
-  /* config chips */
   const box = $("dashConfig");
   box.textContent = "";
   [
-    ["Niche", niche],
-    ["Audience", $("audienceSel").value],
-    ["Clips", $("numClips").value],
-    ["Length", length ? length.textContent : ""],
-    ["Model", model],
+    ["niche", nicheValue()],
+    ["clips", $("numClips").value],
+    ["length", length ? length.textContent : ""],
+    ["audience", $("audienceSel").value],
+    ["model", $("modelSel").value],
   ].forEach(([k, v]) => {
     if (!v) return;
     const chip = el("span", "chip");
     chip.appendChild(el("b", null, k));
-    chip.appendChild(document.createTextNode(v));
+    chip.appendChild(document.createTextNode(String(v)));
     box.appendChild(chip);
   });
-
-  /* pipeline */
-  const steps = [
-    {
-      icon: "captions", name: "Captions",
-      state: S.caption.detail,
-      tone: S.caption.state === "ready" ? "done" : S.caption.state === "failed" ? "" : "ready",
-    },
-    {
-      icon: "scan", name: "Transcript check",
-      state: stamps ? `${stamps} timestamps` : "no timestamps yet",
-      tone: stamps ? "done" : "",
-    },
-    {
-      icon: "chip", name: "Model",
-      state: model || "none",
-      tone: model ? "done" : "",
-    },
-    {
-      icon: "shield", name: "Rule gate",
-      state: "6 rules · 8.0 threshold",
-      tone: "done",
-    },
-    {
-      icon: "scissors", name: "Export",
-      state: S.tools.can_cut ? "ffmpeg ready" : "ffmpeg missing",
-      tone: S.tools.can_cut ? "done" : "",
-    },
-  ];
-  const list = $("pipeline");
-  list.textContent = "";
-  steps.forEach((step) => {
-    const li = el("li", step.tone);
-    const dot = el("div", "step-dot");
-    dot.appendChild(icon(step.icon));
-    li.appendChild(dot);
-    const body = el("div", "step-body");
-    body.appendChild(el("div", "step-name", step.name));
-    body.appendChild(el("div", "step-state", step.state));
-    li.appendChild(body);
-    list.appendChild(li);
-  });
-
-  /* recent runs */
-  const recent = readRecent();
-  const body = $("recentBody");
-  body.textContent = "";
-  $("clearRecent").hidden = recent.length === 0;
-
-  if (!recent.length) {
-    const empty = el("div", "recent-empty");
-    empty.appendChild(el("strong", null, "No runs yet"));
-    empty.appendChild(el("span", null, "Each extraction is logged here, on this device."));
-    body.appendChild(empty);
-    return;
-  }
-  const table = el("table", "recent-tbl");
-  recent.slice(0, 6).forEach((run) => {
-    const tr = el("tr");
-    tr.appendChild(el("td", "c-niche", run.niche || "—"));
-    tr.appendChild(el("td", "c-count", `${run.kept}/${run.requested}`));
-    tr.appendChild(el("td", "c-count", run.model || ""));
-    tr.appendChild(el("td", "c-when", run.at || ""));
-    table.appendChild(tr);
-  });
-  body.appendChild(table);
 }
 
 function readRecent() {
@@ -444,34 +408,50 @@ function readRecent() {
   } catch { return []; }
 }
 
-/* ── panes ───────────────────────────────────────────── */
-const PANES = ["emptyPane", "progressPane", "errorPane", "resultsPane"];
-const showPane = (id) => PANES.forEach((p) => { $(p).hidden = p !== id; });
+function renderHistory() {
+  const body = $("recentBody");
+  if (!body) return;
+  const recent = readRecent();
+  body.textContent = "";
+  if (!recent.length) {
+    body.appendChild(el("p", "recent-empty", "Nothing yet. Finished runs are listed here."));
+    return;
+  }
+  const table = el("table", "recent-tbl");
+  recent.slice(0, 10).forEach((run) => {
+    const tr = el("tr");
+    tr.appendChild(el("td", null, run.niche || "—"));
+    tr.appendChild(el("td", "c-count", `${run.kept}/${run.requested}`));
+    tr.appendChild(el("td", "c-count", run.model || ""));
+    tr.appendChild(el("td", "c-when", run.at || ""));
+    table.appendChild(tr);
+  });
+  body.appendChild(table);
+}
 
+/* ── failure card ────────────────────────────────────── */
 function renderError(title, message, detail) {
   showPane("errorPane");
   const pane = $("errorPane");
   pane.textContent = "";
 
-  const wrap = el("div", "err bad");
-  const head = el("div", "err-head");
+  const box = el("div", "fail-box");
+  const head = el("div", "fail-head");
   const ico = el("div", "ico");
   ico.appendChild(icon("alert"));
   head.appendChild(ico);
-  head.appendChild(el("h1", null, title));
-  wrap.appendChild(head);
-  wrap.appendChild(el("p", "err-msg", message));
-  if (detail) wrap.appendChild(el("div", "err-hint", detail));
+  head.appendChild(el("h2", null, title));
+  box.appendChild(head);
+  box.appendChild(el("p", "fail-msg", message));
+  if (detail) box.appendChild(el("div", "fail-hint", detail));
 
-  const back = el("button", "btn tiny", "Back");
-  back.onclick = () => { showPane("emptyPane"); renderDashboard(); };
+  const back = el("button", "btn small", "Back");
+  back.onclick = () => { showPane("landingPane"); renderSummary(); };
   const row = el("div");
   row.style.display = "flex";
   row.appendChild(back);
-  wrap.appendChild(row);
-
-  pane.appendChild(wrap);
-  status("Failed", title);
+  box.appendChild(row);
+  pane.appendChild(box);
 }
 
 /* ── extraction ──────────────────────────────────────── */
@@ -497,7 +477,7 @@ function readPayload() {
 async function run() {
   const payload = readPayload();
   if (!payload.youtube_url && !payload.transcript_text) {
-    note($("sourceState"), "Paste a URL or load a transcript first.", "bad");
+    note($("sourceState"), "Paste a link or load a transcript first.", "bad");
     $("ytUrl").focus();
     return;
   }
@@ -505,13 +485,13 @@ async function run() {
   S.payload = payload;
   S.result = null;
   S.jobId = null;
+  closeDrawers();
   $("runBtn").disabled = true;
   showPane("progressPane");
   $("stageLog").textContent = "";
   $("barFill").style.width = "2%";
   $("pctText").textContent = "0%";
   $("stageText").textContent = "Queued";
-  status("Running", payload.niche);
 
   try {
     const { job_id } = await api("/api/extract", { method: "POST", body: JSON.stringify(payload) });
@@ -542,7 +522,6 @@ function pollJob(jobId) {
     $("barFill").style.width = pct + "%";
     $("pctText").textContent = pct + "%";
     $("stageText").textContent = job.stage || "Working";
-    $("statusElapsed").textContent = job.elapsed_s ? `${job.elapsed_s}s` : "";
 
     if (pct !== last) {
       last = pct;
@@ -558,6 +537,7 @@ function pollJob(jobId) {
         S.result = result;
         renderResults(result, S.payload, job);
         saveRun(result, S.payload);
+        renderHistory();
       } catch (e) {
         renderError("Results unreadable", e.message, "The job finished but the payload failed to render.");
       }
@@ -638,7 +618,6 @@ function renderResults(data, payload, job) {
   setView("clips");
   selectClip(0);
   setupExport(data);
-  status(`${clips.length} of ${payload.num_clips} kept`, `${rejected.length} rejected`);
 }
 
 function selectClip(index) {
@@ -783,7 +762,6 @@ async function startCut() {
   $("fileList").textContent = "";
   $("cutFill").style.width = "0%";
   note($("cutState"), "Downloading source…");
-  status("Cutting", `${height}p`);
 
   try {
     const { cut_id } = await api(`/api/jobs/${S.jobId}/cut`, {
@@ -794,7 +772,6 @@ async function startCut() {
   } catch (e) {
     $("cutBtn").disabled = false;
     note($("cutState"), [e.message, e.hint].filter(Boolean).join(" — "), "bad");
-    status("Cut failed", e.message);
   }
 }
 
@@ -820,12 +797,11 @@ function pollCut(cutId) {
       $("cutBtn").disabled = false;
       note($("cutState"), `${cut.files.length} file(s) · ${cut.quality || ""}`, "ok");
       renderFiles(cut.files || []);
-      status("Cut complete", `${cut.files.length} files`);
+      toast(`${cut.files.length} file(s) cut`);
     } else if (cut.status === "error") {
       clearInterval(S.timers.cut);
       $("cutBtn").disabled = false;
       note($("cutState"), cut.error || "Cut failed", "bad");
-      status("Cut failed", cut.error || "");
     }
   }, 1200);
 }
@@ -853,7 +829,7 @@ function downloadReport() {
   a.download = `clips-${S.result.video_id || "session"}.txt`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 3000);
-  toast("Report downloaded");
+  toast("Report saved");
 }
 
 /* ── history ─────────────────────────────────────────── */

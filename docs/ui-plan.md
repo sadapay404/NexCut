@@ -1,85 +1,80 @@
-# UI plan — v5 (short-viewport rebuild)
+# UI plan — v6 (reference-led rebuild)
 
-## The actual failure, named
+## What changed and why
 
-The last three UIs were built as if the window were tall. They used one control
-per row, folds for anything secondary, and no vertical budget at all. In the
-frame that actually gets used — a Cloud Shell Web Preview at roughly
-**1366 × 600** — that produced:
+v5 was a dense cockpit. That was the wrong genre. The reference the user supplied
+is a **framed hero**: wordmark left, two tabs centre, one link bar, everything
+inside a single rounded panel with corner labels and a credits line. v6 adopts
+that composition — not the reference's markup, copy or colours, its structure.
 
-- a content pane that was mostly empty, holding one sentence;
-- the transcript panel collapsed to a sliver;
-- a **native** scrollbar in a 272 px sidebar (reads as a broken page);
-- `Option E: 45s–5m…` truncated inside the Length select;
-- three status pills and a status bar doing nothing for nobody.
-
-None of that was a backend problem. It was a layout budget problem, and the
-harness never caught it because jsdom proves behaviour, not pixels.
-
-## What v5 changes
-
-**The budget, written down.** A 600 px window is `48 (top) + 526 (shell) + 26
-(status)`. The sidebar must therefore hold 3 panels plus the run button inside
-526 px, and the content pane must fill 526 px with structure, not whitespace.
-
-| Decision | Why |
+| Reference element | NexCut v6 |
 |---|---|
-| Shell is `grid-template-rows: 48px / 1fr / 26px`, page never scrolls | One scroll model. Only panes and inner lists scroll. |
-| Sidebar 292 px, 30 px controls, `@media (max-height: 660px)` drops controls to 26 px and paddings to 4–7 px | Every field gets a full-width row so nothing truncates, while 5 selects + 2 numeric fields still fit. |
-| Every select is full width, one per row | Niche labels reach 26 characters (`Relationship & Pop Culture`); half-width columns are what truncated them. |
-| Length labels are rebuilt, not copied | Server sends `Option E: 45s–5m25s (wide range — default)`; the UI shows `45s–5m25s` and keeps the original in `title`. 11 characters cannot clip. |
-| Scrollbars themed globally (`scrollbar-width`, `::-webkit-scrollbar`) | The OS scrollbar was the single most "unfinished" thing on screen. |
-| Transcript is a `<details>` with a live `charBadge` and **closed by default** | It is optional input; the sidebar needs the height. Upload / Sample stay one click away inside it. |
-| Dashboard is a real screen: config chips, 5-step pipeline, recent runs | The empty state was the dead space. It now shows what will happen, in order, with live state per step. |
-| Results keep header → stats strip → split (table + 350 px inspector) | At 600 px the table still shows ~9 rows; the inspector and export stay visible without scrolling the page. |
-| Status bar trimmed to: state · hint · provider · elapsed · version | Only facts that change. |
-| `?v=` on CSS/JS plus `Cache-Control: no-cache` | A stale stylesheet is indistinguishable from a broken redesign. |
+| `NEXUS / DOWNLOADER` wordmark | `NEX**CUT** / Clip Studio` — NEX in ink, CUT in gold |
+| Centred nav pills | `Cutter` · `Downloader` with a `soon` badge |
+| `SIDE A — LINK INTAKE` corner label | same, plus live provider / prompt / cutting state on the right |
+| Display heading with one italic word | `Sheikh Arsalan` + italic gold `Automation` |
+| One-line tagline | replaced with mechanics: "Paste a YouTube link. Captions, model pass, rule check and the cut run on this machine." |
+| Standard / Batch toggle | removed — there is nothing to toggle until batch exists |
+| One URL bar with the action inside | one URL bar, `Extract` inside, `⌘↵` hint |
+| Micro chips under the bar | `Options` `Transcript` `Sample` `History` — each opens a drawer |
+| Bottom microcopy | live source line: `No source` → `Fetching captions…` → `Captions ready — auto · 214 lines · 12:04` |
+| Credits line | `Proudly created by Sheikh Arsalan in collaboration with Mubashir` |
 
-**Copy rule still holding:** labels, units, states. No slogans, no "AI-powered",
-no second sentence where the first one is enough.
+## Composition rules
 
-## What is verified, and how
+- **One panel.** The stage is a single card, `min(1180px, 100%)` wide, capped at
+  660px tall, centred in a grid. Top bar 58px, credits 34px (52/30 under 700px tall).
+- **Nothing lives outside the card.** Progress, errors and results all render
+  inside the same frame, so the composition never collapses.
+- **Progressive disclosure.** Niche, audience, language, length, clips, model and
+  key sit in an `Options` drawer. Transcript and history have their own drawers.
+  Closed by default; the landing stays a hero.
+- **Result state** replaces the hero with `Result` header, stats strip, clip table
+  and a fixed inspector/export rail inside the same card. At 600px the table still
+  shows ~12 rows.
+- **Type.** Sans for the chrome, one serif italic word for the gold accent, mono
+  for every number, timestamp and micro-label. No icon fonts, no web fonts, no CDN.
+- **Decoration is one layer.** A soft warm radial plus concentric grooves at 4–7%
+  opacity, under `pointer-events: none`, dimmed in the light theme.
+
+## Verified
 
 | Check | Command | Result |
 |---|---|---|
-| Page boots against a stubbed API, full run, tabs, cut, back to dashboard | `node tools/ui_smoke.js` | 20 assertions pass |
-| Backend contract unchanged | `python3 -m unittest discover -s tests` | 93 pass |
-| Static/HTML integrity | id cross-check script | 98 ids, no duplicates, every JS id exists, every HTML class has a rule, CSS braces balanced |
-| Serving | `curl` on `/`, `/static/style.css?v=6`, `/static/app.js?v=6` | 200, `no-cache` |
-| Real render at 1366 × 600 | **not run — no browser in this sandbox** | open preview and look |
+| Boot, drawers, tab switch, full run, cut, back to landing | `node tools/ui_smoke.js` | 25 assertions pass |
+| Backend | `python3 -m unittest discover -s tests` | 93 pass |
+| Structure | id/class/CSS audit | 100 ids, no duplicates, every JS id exists, every class has a rule, braces balanced |
+| Serving | `curl` `/`, `/static/style.css?v=7`, `/static/app.js?v=7` | 200 |
 
-The last row is the honest gap. Playwright's Chromium download is blocked here
-(`cdn.playwright.dev` is not reachable), and jsdom does no layout, so I can
-prove that every control is wired and that no label can clip by length — I
-cannot prove how it looks. That is exactly why the preview is left running.
+Not verified: pixels. There is no browser in this sandbox and Playwright's
+Chromium download is blocked, so the preview must be judged by eye.
 
-## Phase plan from here
+## Phases
 
-**Phase A — confirm the frame (now).** Look at the preview at the real size.
-Anything wrong is reported as: which region, too tall / too cramped / clipped /
-wrong order. Those are all one-line fixes now that every control owns a row.
+**Phase 1 — this card.** Landing, drawers, progress, results, export rail,
+Downloader placeholder, credits. Done.
 
-**Phase B — results workspace.** Sortable columns (score, length, start), score
-threshold filter, rejection reasons as a filter, `youtu.be/<id>?t=<start>` links,
-"copy all titles", ZIP of all cuts (stdlib `zipfile`). Acceptance: 12-clip
-session, sorting proven by assertion in the harness.
+**Phase 2 — result workspace.** Sortable columns, score filter, rejection reasons
+as a filter, `youtu.be/<id>?t=<start>` links, copy-all titles, ZIP of all cuts
+(stdlib `zipfile`).
 
-**Phase C — export.** Per-clip cut from the inspector, per-file progress queue,
-quality picker showing resolution and estimated size before committing,
-retention/size panel for `data/source` and `data/cuts`.
+**Phase 3 — cutting queue.** Per-clip cut from the inspector, per-file progress,
+quality picker with estimated size, retention panel for `data/source` and
+`data/cuts`.
 
-**Phase D — light theme parity and accessibility.** Focus order, `aria-live` on
-progress and status, contrast pass in both themes, visible focus everywhere.
+**Phase 4 — Downloader.** Real second tab: video / audio, quality list from
+`/api/video-quality`, one queue, same yt-dlp pipe. It shares the key field and the
+history, so the card composition does not change.
 
-**Phase E — real-run hardening.** Real key, real video, every failure class gets
-a written message; confirm the MP4 starts on the exact requested frame; a
-≥ 60-minute video for token limits.
+**Phase 5 — real-run hardening.** Real key, real video, every failure class has a
+written message; confirm the MP4 starts on the requested frame; test a ≥ 60-minute
+source.
 
 ## Rules
 
 1. No UI change ships without `node tools/ui_smoke.js` passing.
-2. Design at 1366 × 600 first, then let taller windows breathe.
-3. Labels, units, states. No marketing copy.
-4. One accent. Gradients only in progress fills and the logo mark.
+2. Design at 1366 × 600 first.
+3. Labels, units, states — no marketing copy.
+4. One accent, one decoration layer.
 5. A disabled control says why.
 6. Every error names the failure and the next action.

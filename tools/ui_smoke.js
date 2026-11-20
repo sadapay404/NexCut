@@ -7,7 +7,7 @@ const { JSDOM, VirtualConsole } = require("jsdom");
 
 const ROOT = path.resolve(__dirname, "..");
 const html = fs.readFileSync(path.join(ROOT, "web/index.html"), "utf8")
-  .replace('<script src="/static/app.js"></script>', "");
+  .replace(/<script src="\/static\/app\.js[^"]*"><\/script>/, "");
 
 const CONFIG = {
   version: "v0.1.0",
@@ -108,11 +108,26 @@ function makeFetch(log) {
     "provider chip": $("providerText").textContent.trim(),
     "prompt chip": $("promptText").textContent.trim(),
     "tools chip": $("toolsText").textContent.trim(),
-    "empty title": $("emptyTitle").textContent.trim(),
-    "pipeline steps": window.document.querySelectorAll("#pipeline li").length,
+    "hero heading": /Sheikh Arsalan/.test($("emptyTitle").textContent),
+    "mode tabs": window.document.querySelectorAll("#modeTabs button").length,
     "config chips": window.document.querySelectorAll("#dashConfig .chip").length,
     "window label short": !/Option/.test($("windowSel").options[0].textContent),
   };
+
+  // drawers open and close on the chips
+  $("optionsToggle").click();
+  checks["options drawer"] = !$("optionsPanel").hidden && $("optionsToggle").getAttribute("aria-expanded") === "true";
+  $("optionsToggle").click();
+  checks["options closes"] = $("optionsPanel").hidden;
+  $("transcriptToggle").click();
+  checks["transcript drawer"] = !$("transcriptPanel").hidden;
+  $("transcriptToggle").click();
+
+  // downloader tab
+  window.document.querySelector('#modeTabs button[data-mode="downloader"]').click();
+  checks["downloader pane"] = !$("downloaderPane").hidden && $("cutterPane").hidden;
+  window.document.querySelector('#modeTabs button[data-mode="cutter"]').click();
+  checks["back to cutter"] = !$("cutterPane").hidden && $("downloaderPane").hidden;
 
   // drive a full run: URL -> captions -> extract -> results -> cut
   $("ytUrl").value = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
@@ -146,15 +161,17 @@ function makeFetch(log) {
   $("newRunBtn").click();
   await new Promise((r) => setTimeout(r, 30));
   checks["recent rows"] = window.document.querySelectorAll("#recentBody tr").length;
-  checks["back to dashboard"] = !$("emptyPane").hidden;
+  checks["back to landing"] = !$("landingPane").hidden;
 
   console.log("── checks");
   Object.entries(checks).forEach(([k, v]) => console.log(`   ${k.padEnd(22)} ${v}`));
 
-  const mustBeNonZero = ["pipeline steps", "config chips", "recent rows", "result rows", "detail rows", "file links"];
+  const mustBeNonZero = ["mode tabs", "config chips", "recent rows", "result rows", "detail rows", "file links"];
   const bad = Object.entries(checks).filter(([k, v]) =>
     (k.endsWith("options") || mustBeNonZero.includes(k)) ? !v : false);
-  const misnamed = Object.entries(checks).filter(([k, v]) => k === "window label short" && !v);
+  const mustBeTrue = ["window label short", "hero heading", "options drawer", "options closes",
+    "transcript drawer", "downloader pane", "back to cutter", "back to landing"];
+  const misnamed = Object.entries(checks).filter(([k, v]) => mustBeTrue.includes(k) && !v);
 
   if (errors.length) {
     console.log("\n── errors");
