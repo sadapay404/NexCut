@@ -122,6 +122,12 @@ def context(
     custom_max: int | None = None,
     ranges: str = "",
 ) -> dict:
+    if niche.strip().lower() in ("", "auto", "auto-detect", "auto detect", "detect"):
+        niche = "AUTO — detect it from the transcript, then state `niche > sub-niche` at the top"
+    count = int(num_clips or 0)
+    if count <= 0:
+        num_clips = "AUTO — decide with Step 0 and print the AUTO line first"
+
     base, _, sub = niche.partition(" — ")
     if custom_min and custom_max:
         lo, hi, label = int(custom_min), int(custom_max), f"custom {custom_min}-{custom_max}s"

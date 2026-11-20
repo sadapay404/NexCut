@@ -127,6 +127,9 @@ class JobManager:
 
             self._step(job, 32, f"Covering {len(ranges)} range(s): {format_ranges(ranges)[:70]}")
 
+            requested = int(p.get("num_clips") or 0)   # 0 or blank = AUTO
+            auto_count = requested <= 0
+
             window = p.get("window") or "E"
             custom_min = p.get("custom_min_sec")
             custom_max = p.get("custom_max_sec")
@@ -140,11 +143,11 @@ class JobManager:
             self._step(job, 44, "Building the prompt…")
             system, user, warnings = compose(
                 transcript=transcript,
-                niche=p.get("niche") or "True Crime",
+                niche=p.get("niche") or "auto",
                 audience=p.get("audience") or "U.S. English",
                 language=p.get("language") or "U.S. English",
                 window=window,
-                num_clips=int(p.get("num_clips") or 5),
+                num_clips=requested,
                 channel_show=channel,
                 episode_title=title,
                 host_guest=p.get("host_guest") or "",
@@ -166,10 +169,10 @@ class JobManager:
                 ctx={
                     "transcript": transcript,
                     "window": window,
-                    "num_clips": int(p.get("num_clips") or 5),
+                    "num_clips": requested,
                     "custom_min": custom_min,
                     "custom_max": custom_max,
-                    "niche": p.get("niche") or "True Crime",
+                    "niche": p.get("niche") or "auto",
                 },
             )
 
@@ -185,7 +188,7 @@ class JobManager:
             result = apply_rules(
                 result, transcript, window=window,
                 custom_min=custom_min, custom_max=custom_max,
-                limit=int(p.get("num_clips") or 5),
+                limit=None if auto_count else requested,
             )
             result.sweep.ranges = result.sweep.ranges or format_ranges(ranges)
 
