@@ -290,11 +290,22 @@ def mask(key: str) -> str:
 def main(argv: list[str]) -> int:
     env = read_env()
     load_env(env)
+    # NEXCUT_API_KEY first, then the provider's own variable (CLOUDFLARE_API_TOKEN,
+    # GROQ_API_KEY, GEMINI_API_KEY, …) — same rule the server uses.
     key = (env.get("NEXCUT_API_KEY") or os.environ.get("NEXCUT_API_KEY", "")).strip()
+    if not key:
+        found = env_key_list()
+        key = found[0] if found else ""
     model = argv[1] if len(argv) > 1 else configured_model()
 
     if not key:
-        print("No NEXCUT_API_KEY in .env or the environment.")
+        print("No key found. Set one of these in .env:")
+        print("  NEXCUT_API_KEY           works for any provider")
+        print("  CLOUDFLARE_API_TOKEN     cloudflare")
+        print("  GEMINI_API_KEY           gemini (GOOGLE_API_KEY also works)")
+        print("  GROQ_API_KEY             groq")
+        print("  OPENAI_API_KEY           openai")
+        print("  NEXCUT_API_KEYS          several, comma or newline separated")
         return 2
     if model in ("--list", "-l", "list"):
         return list_models(key)

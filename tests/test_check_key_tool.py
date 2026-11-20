@@ -123,6 +123,56 @@ class ListModelsTests(unittest.TestCase):
         self.assertIn("NEXCUT_MODELS=", out)
 
 
+class NativeKeyDiscovery(unittest.TestCase):
+    """The tool must find CLOUDFLARE_API_TOKEN and friends, like the server does."""
+
+    def run_main(self, env_text: str):
+        import contextlib
+        import io as _io
+        import os
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            (pathlib.Path(tmp) / ".env").write_text(env_text, encoding="utf-8")
+            original = check_key.ROOT
+            check_key.ROOT = pathlib.Path(tmp)
+            buffer = _io.StringIO()
+            calls = {}
+
+            def fake_post(url, body, headers):
+                calls["url"] = url
+                calls["headers"] = headers
+                return {"result": {"response": "READY"}}
+
+            try:
+                with mock.patch.dict(os.environ, {}, clear=False):
+                    for name in ("NEXCUT_API_KEY", "CLOUDFLARE_API_TOKEN"):
+                        os.environ.pop(name, None)
+                    with mock.patch.object(check_key, "_post", fake_post), \
+                         contextlib.redirect_stdout(buffer):
+                        code = check_key.main(["check_key.py"])
+            finally:
+                check_key.ROOT = original
+        return code, buffer.getvalue(), calls
+
+    def test_cloudflare_token_is_found(self):
+        code, out, calls = self.run_main(
+            "NEXCUT_PROVIDER=cloudflare\n"
+            "CLOUDFLARE_ACCOUNT_ID=acct\n"
+            "CLOUDFLARE_API_TOKEN=cfat_abc\n"
+            "NEXCUT_MODELS=@cf/meta/llama-3.3-70b-instruct-fp8-fast\n")
+        self.assertEqual(code, 0, out)
+        self.assertIn("READY", out)
+        self.assertEqual(calls["headers"]["Authorization"], "Bearer cfat_abc")
+        self.assertIn("/accounts/acct/ai/run/", calls["url"])
+
+    def test_missing_key_lists_the_accepted_names(self):
+        code, out, _ = self.run_main("NEXCUT_PROVIDER=gemini\n")
+        self.assertEqual(code, 2)
+        self.assertIn("CLOUDFLARE_API_TOKEN", out)
+        self.assertIn("GROQ_API_KEY", out)
+
+
 class CloudflareSpecTests(unittest.TestCase):
     def test_url_headers_and_result_shape(self):
         import os
