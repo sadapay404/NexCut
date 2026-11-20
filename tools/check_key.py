@@ -146,9 +146,107 @@ def list_models(key: str) -> int:
     return 0
 
 
+def test_keys(model: str | None = None) -> int:
+    """One tiny call per configured key — which of them actually work."""
+    keys = env_key_list()
+    if not keys:
+        print("No keys in .env (NEXCUT_API_KEY / NEXCUT_BACKUP_KEY / NEXCUT_API_KEYS).")
+        return 2
+    model = model or configured_model()
+    limit = keys if len(keys) <= 25 else keys[:25]
+    print(f"provider {provider()}  model {model}  {len(keys)} key(s)"
+          + (f" — testing the first {len(limit)}" if len(limit) < len(keys) else "") + "\n")
+
+    working: list[int] = []
+    for index, key in enumerate(limit, start=1):
+        status, note = probe(key, model)
+        mark = "ok  " if status == 200 else "fail"
+        if status == 200:
+            working.append(index)
+        print(f"  {mark} #{index:<3} {mask(key):<14} {status or '---':<4} {note}")
+
+    print()
+    if working:
+        print(f"{len(working)} of {len(limit)} worked: key #{working[0]}"
+              + (f" (also {', '.join('#' + str(i) for i in working[1:])})"
+                 if len(working) > 1 else ""))
+        print(f"Put it first in NEXCUT_API_KEYS, or leave the list — the app rotates.")
+        return 0
+    print("None of them worked. If every line says 'key refused', the keys are invalid;")
+    print("if they say 'cloudflare edge block', it is the network, not the keys.")
+    return 1
+
+
 def check_key_suggestion(body: str) -> str:
     found = SUGGESTION.search(body or "")
     return found.group(1) if found else ""
+
+
+def request_spec(model: str):
+    """(url, body, extract, header builder) for the configured provider."""
+    kind = provider()
+    if kind in ("groq", "openai"):
+        base = base_url()
+        body = {
+            "model": model,
+            "messages": [{"role": "user", "content": "Reply with the single word READY."}],
+            "temperature": 0,
+            "max_tokens": 16,
+        }
+
+        def extract(payload: dict) -> str:
+            return (payload["choices"][0]["message"]["content"] or "").strip()
+
+        return f"{base}/chat/completions", body, extract, \
+            lambda key: {"Authorization": f"Bearer {key}"}
+
+    body = {
+        "contents": [{"role": "user", "parts": [{"text": "Reply with the single word READY."}]}],
+        "generationConfig": {"maxOutputTokens": 16, "temperature": 0},
+    }
+
+    def extract(payload: dict) -> str:
+        return "".join(p.get("text", "") for p in
+                       payload["candidates"][0]["content"]["parts"]).strip()
+
+    return GEMINI_ENDPOINT.format(model=model), body, extract, \
+        lambda key: {"x-goog-api-key": key}
+
+
+def probe(key: str, model: str) -> tuple[int, str]:
+    """(http status or 0, spoken result) for one key and one model."""
+    url, body, extract, headers = request_spec(model)
+    try:
+        payload = _post(url, body, headers(key))
+        return 200, extract(payload) or "(empty)"
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode()
+        if is_edge_block(detail):
+            return exc.code, "cloudflare edge block (not the key)"
+        if exc.code in (401, 403):
+            return exc.code, "key refused"
+        if exc.code == 404:
+            return 404, f"no model {model}"
+        if exc.code == 429:
+            return 429, "rate limited / out of quota"
+        return exc.code, detail.strip().replace("\n", " ")[:120]
+    except (urllib.error.URLError, TimeoutError) as exc:
+        return 0, f"network: {getattr(exc, 'reason', exc)}"
+
+
+def env_key_list() -> list[str]:
+    sys.path.insert(0, str(ROOT))
+    try:
+        from nexcut.providers import env_keys  # noqa: PLC0415
+        return env_keys()
+    except Exception:  # noqa: BLE001
+        raw = " ".join(os.environ.get(n, "") for n in
+                       ("NEXCUT_API_KEY", "NEXCUT_BACKUP_KEY", "NEXCUT_API_KEYS"))
+        return [k for k in re.split(r"[,\s]+", raw) if k]
+
+
+def mask(key: str) -> str:
+    return f"{key[:4]}…{key[-4:]}" if len(key) > 10 else "…"
 
 
 # ── main ──────────────────────────────────────────────────────────────
@@ -163,6 +261,8 @@ def main(argv: list[str]) -> int:
         return 2
     if model in ("--list", "-l", "list"):
         return list_models(key)
+    if model in ("--keys", "-k", "keys"):
+        return test_keys(argv[2] if len(argv) > 2 else None)
 
     kind = provider()
     print(f"key  {key[:6]}…{key[-4:]}  ({len(key)} chars)")

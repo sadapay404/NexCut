@@ -89,6 +89,34 @@ def provider_env_hint() -> str:
             "enabled, then restart the server so .env is re-read.")
 
 
+def parse_keys(*sources: str) -> list[str]:
+    """Deduplicated key list from any mix of comma, space and newline separated."""
+    out: list[str] = []
+    for raw in sources:
+        for part in re.split(r"[,\s]+", raw or ""):
+            key = part.strip().strip('"').strip("'")
+            if key and key not in out:
+                out.append(key)
+    return out
+
+
+def env_keys() -> list[str]:
+    """NEXCUT_API_KEY, then NEXCUT_BACKUP_KEY, then everything in NEXCUT_API_KEYS."""
+    return parse_keys(
+        os.environ.get("NEXCUT_API_KEY", ""),
+        os.environ.get("NEXCUT_BACKUP_KEY", ""),
+        os.environ.get("NEXCUT_API_KEYS", ""),
+    )
+
+
+def attempt_budget() -> int:
+    """Upper bound on provider calls per extraction — dead-key lists stay cheap."""
+    try:
+        return max(1, int(os.environ.get("NEXCUT_MAX_ATTEMPTS", "12")))
+    except ValueError:
+        return 12
+
+
 def request_timeout() -> int:
     try:
         return max(10, int(os.environ.get("NEXCUT_TIMEOUT", "180")))
@@ -148,10 +176,11 @@ class ProviderError(ExtractError):
     """Non-retryable unless `retryable` is set (then the cascade moves on)."""
 
     def __init__(self, message: str, *, retryable: bool = False,
-                 hint: str = "") -> None:
+                 hint: str = "", key_dead: bool = False) -> None:
         super().__init__(message)
         self.retryable = retryable
         self.hint = hint
+        self.key_dead = key_dead
 
 
 class _HttpProvider:
@@ -202,7 +231,7 @@ class _HttpProvider:
                     ) from exc
                 raise ProviderError(
                     "That API key was rejected. Check it was copied fully and is enabled.",
-                    hint=provider_env_hint(),
+                    hint=provider_env_hint(), key_dead=True,
                 ) from exc
             if exc.code == 404:
                 raise ProviderError(
@@ -220,34 +249,57 @@ class _HttpProvider:
             raise ProviderError(f"Could not reach the model provider: {exc.reason}") from exc
 
     # public ------------------------------------------------------------
-    def complete(self, *, system: str, user: str, model: str, cascade: bool) -> tuple[str, str]:
+    def keys(self) -> list[str]:
+        return parse_keys(self.api_key, self.backup_key,
+                          os.environ.get("NEXCUT_API_KEYS", ""))
+
+    def complete(self, *, system: str, user: str, model: str, cascade: bool,
+                 budget: int | None = None) -> tuple[str, str]:
         order = [model]
         if cascade:
             order += [m["id"] for m in model_catalog() if m["id"] != model]
-        keys = [self.api_key] + ([self.backup_key] if self.backup_key else [])
-        if not keys[0] and not self.backup_key:
+        keys = self.keys()
+        if not keys:
             raise ProviderError(
                 "No API key. Put NEXCUT_API_KEY=... in .env next to the repo root, "
                 "or export it before starting the server.",
                 hint="NEXCUT_API_KEY was empty when the server started — .env is only "
                      "read at startup, so restart after editing it.")
 
+        limit = budget if budget is not None else attempt_budget()
+        attempts = 0
+        dead: list[int] = []          # 1-based key numbers that were refused
         last: ProviderError | None = None
-        for key in keys:
+
+        for index, key in enumerate(keys, start=1):
             for candidate in order:
+                if attempts >= limit:
+                    break
+                attempts += 1
                 try:
                     text = self._attempt(candidate, system, user, key)
+                    self.served_key = index
                     return text, getattr(self, "served_model", candidate)
                 except TimeoutError_:
                     raise
                 except ProviderError as exc:
                     last = exc
-                    if not exc.retryable:
-                        raise
-        if len(order) == 1 and last is not None:
+                    if exc.key_dead:
+                        dead.append(index)
+                        break                      # this key is out; next key
+                    # model-level trouble (404 / 429 / 5xx): next candidate
+            if attempts >= limit:
+                break
+
+        if last is not None and len(keys) == 1 and len(order) == 1:
             raise last
+        tried = f"{attempts} attempt(s) across {len(keys)} key(s) and {len(order)} model(s)"
+        if dead:
+            tried += f"; {len(dead)} key(s) refused"
         raise ProviderError(
-            "Every model in the fallback chain failed. " + (str(last) if last else "")
+            f"No model answered — {tried}."
+            + (f" Last error: {last}" if last else ""),
+            hint=(last.hint if last else "") or provider_env_hint(),
         )
 
 

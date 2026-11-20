@@ -141,6 +141,11 @@ def key_status() -> tuple[int, dict]:
         return 502, {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
     if hasattr(provider, "timeout"):
         provider.timeout = min(getattr(provider, "timeout", 30) or 30, 30)
+    key_count = 0
+    try:
+        key_count = len(provider.keys())
+    except Exception:  # noqa: BLE001 - the stub has no keys
+        key_count = 0
     if getattr(provider, "name", "") == "stub":
         return 200, {"ok": True, "provider": "stub", "model": "offline-demo", "ms": 0,
                      "reply": "demo provider — no key is in use"}
@@ -153,6 +158,7 @@ def key_status() -> tuple[int, dict]:
                 user="Reply with the single word READY.",
                 model=candidate,
                 cascade=False,
+                budget=6,          # a dead key list must not stall the check
             )
         except ProviderError as exc:
             tried.append(f"{candidate}: {exc}")
@@ -167,6 +173,8 @@ def key_status() -> tuple[int, dict]:
         else:
             return 200, {"ok": True, "provider": getattr(provider, "name", "?"),
                          "model": used,
+                         "key": getattr(provider, "served_key", 1),
+                         "keys": key_count,
                          "ms": int((time.monotonic() - started) * 1000),
                          "reply": (text or "").strip()[:60],
                          "skipped": tried}
@@ -180,7 +188,9 @@ def key_status() -> tuple[int, dict]:
     elif any("503" in t or "unavailable" in t for t in tried):
         hint = "Google is overloaded for these ids — try again in a minute, or pick another id."
     return 502, {"ok": False, "detail": "No model answered. " + " | ".join(tried),
-                 "hint": hint, "tried": tried}
+                 "hint": hint or (("Tried all " + str(key_count) + " key(s).")
+                                  if key_count else ""),
+                 "keys": key_count, "tried": tried}
 
 
 class Handler(BaseHTTPRequestHandler):
