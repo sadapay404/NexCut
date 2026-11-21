@@ -259,7 +259,13 @@ class _HttpProvider:
         )
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                return json.loads(r.read().decode() or "{}")
+                raw = r.read().decode(errors="replace")
+                try:
+                    return json.loads(raw or "{}")
+                except json.JSONDecodeError as exc:
+                    raise ProviderError(
+                        f"Provider returned non-JSON ({r.status}): {raw[:200]}"
+                    ) from exc
         except socket.timeout as exc:
             raise TimeoutError_() from exc
         except urllib.error.HTTPError as exc:
