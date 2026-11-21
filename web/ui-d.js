@@ -459,6 +459,14 @@
       });
     }
 
+    var foot = document.querySelector(".foot");
+    var mark = document.querySelector(".panel-mark");
+    if (foot && mark && typeof IntersectionObserver !== "undefined") {
+      new IntersectionObserver(function (entries) {
+        mark.classList.toggle("is-floating", entries[0].isIntersecting);
+      }, { threshold: 0.05 }).observe(foot);
+    }
+
     var manualBox = document.getElementById("d-manual-box");
     var manualBtn = document.getElementById("d-manual-submit");
     var manualTxt = document.getElementById("d-manual-json");
