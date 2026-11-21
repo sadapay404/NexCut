@@ -86,14 +86,15 @@
       var block = N.el("div", "field-block" + (f.strong ? " strong" : ""));
       block.setAttribute("data-field", f.key);
       var key = N.el("div", "fk");
-      key.appendChild(N.el("span", null, f.label));
+      var label = f.label === "On-screen question" ? "Video Title" : f.label;
+      key.appendChild(N.el("span", null, label));
       if (f.copy) {
         var btn = N.el("button", "copy", "Copy");
         btn.type = "button";
         btn.setAttribute("data-role", "copy-control");
         btn.setAttribute("data-action", "copy");
         btn.setAttribute("data-copy", f.value);
-        btn.setAttribute("aria-label", "Copy " + f.label.toLowerCase());
+        btn.setAttribute("aria-label", "Copy " + label.toLowerCase());
         key.appendChild(btn);
       }
       block.appendChild(key);
@@ -101,20 +102,6 @@
       wrap.appendChild(block);
     });
 
-    if (pack.overlays.length) {
-      var ov = N.el("div", "field-block");
-      ov.setAttribute("data-field", "overlays");
-      ov.appendChild(N.el("div", "fk", "On-screen overlays"));
-      var list = N.el("ul", "overlays");
-      pack.overlays.forEach(function (o) {
-        var li = N.el("li");
-        li.appendChild(N.el("span", "ov-time", o.offset));
-        li.appendChild(N.el("span", null, o.text));
-        list.appendChild(li);
-      });
-      ov.appendChild(list);
-      wrap.appendChild(ov);
-    }
     return wrap;
   }
 

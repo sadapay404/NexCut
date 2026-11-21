@@ -9,22 +9,22 @@
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 
-  /* the work surface */
-  --surface:   #fafcfa;
-  --surface-2: #f1f6f2;
+  /* the work surface: ink-on-paper */
+  --surface:   #f7f6f2;
+  --surface-2: #efede6;
   --field:     #ffffff;
-  --hover:     rgba(0, 138, 56, .06);
-  --line:      #e0e8e2;
-  --line-2:    #c6d4ca;
+  --hover:     rgba(0, 122, 51, .06);
+  --line:      #e2dfd6;
+  --line-2:    #cbc6ba;
 
-  --ink:       #080c09;
-  --ink-2:     #3b473f;
-  --ink-3:     #637067;
+  --ink:       #141916;
+  --ink-2:     #3f4842;
+  --ink-3:     #6b736d;
 
-  --accent:      #008a38;
-  --accent-hi:   #00a344;
+  --accent:      #007a33;
+  --accent-hi:   #00943e;
   --accent-ink:  #ffffff;
-  --accent-soft: rgba(0, 138, 56, .09);
+  --accent-soft: rgba(0, 122, 51, .09);
 
   --ok:   #008a38;
   --bad:  #b0341f;
@@ -211,8 +211,12 @@ textarea:focus-visible { outline: none; }
   border-radius: 12px;
   border: 1px solid rgba(0, 163, 68, .35);
   box-shadow: 0 8px 20px -10px rgba(0, 0, 0, .7);
-  transition: transform .18s ease-out, box-shadow .18s ease-out;
+  transition: transform .18s ease-out, box-shadow .18s ease-out, filter .2s ease;
   will-change: transform;
+}
+html[data-theme="light"] .badge {
+  filter: invert(1) hue-rotate(180deg) contrast(1.06);
+  box-shadow: 0 8px 20px -12px rgba(0, 0, 0, .25);
 }
 
 .brand-txt { display: grid; gap: 7px; }
