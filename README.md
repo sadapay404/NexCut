@@ -127,7 +127,7 @@ argument 'ctx'"* while 219 stub-based tests stayed green.
 
 The UI has four directions (see `docs/ui-directions.md`) that share one engine (`web/core.js`): **UI A**
 (editorial), **UI B** (console, the default), **UI C** (cards) and **UI D**
-(ledger, the minimal one). Open `http://localhost:8137`, or
+(sleeve, the record one). Open `http://localhost:8137`, or
 `http://localhost:8137/?ui=1`, `?ui=2`, `?ui=3`, `?ui=4` to pick one.
 See `docs/ui-directions.md` for what each one optimises for.
 

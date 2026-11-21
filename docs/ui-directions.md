@@ -7,7 +7,7 @@ Four complete interfaces for the same tool, switchable without a rebuild:
 | **A · Editorial / print** | `/?ui=1` or `/ui-a.html` | `web/ui-a.html` |
 | **B · Console / tool** (default) | `/?ui=2` or `/ui-b.html` | `web/ui-b.html` |
 | **C · Cards / consumer** | `/?ui=3` or `/ui-c.html` | `web/ui-c.html` |
-| **D · Ledger / minimal** | `/?ui=4` or `/ui-d.html` | `web/ui-d.html` |
+| **D · Sleeve / record** | `/?ui=4` or `/ui-d.html` | `web/ui-d.html` |
 
 Each page has a small "Preview · A | B | C | D" strip above the product. It sits
 outside the design. To ship a single direction, delete that one `<div class="switch">`
@@ -62,31 +62,36 @@ It optimises for a first-time user and for a phone. It suits someone who shares 
 tool with others, or who wants each step to feel guided. It is the most spacious of the
 three and the one that shows the least at once.
 
-## D · Ledger / minimal
+## D · Sleeve / record
 
-Nothing decorative. One column, one accent, hairline rules, and type that does the
-work: a system sans, a mono for numbers, and no card, shadow or gradient anywhere.
-The page opens light (dark is one tap away, and the choice is remembered). The header
-is a single line: the mark, "Sheikh Arsalan Automation" with the institute line under
-it, the two tabs, and the theme toggle. Below it a thin rail names the current stage
-and carries the build tag.
+A record sleeve on a screen. The page is one framed card: a rail across the top reads
+`SIDE A — <stage>` and carries the build tag, and everything happens inside it. Dark
+by default (the light theme is the paper sleeve), with one accent — vermilion — and
+warm off-white type.
 
-Landing is a headline and one field with the button inside it. Details is a
-label/value list; the plan sits to its right on a laptop and under it on a phone. A
-run shows its stage name, a 3px progress line and the log. Results are a numbered
-list with one hairline per row: index, title, score chip, download, More. Packaging
-opens in place as a two-column grid of labelled fields. The credits line ends the page
-and moves under the progress line while a run is in flight.
+The landing is the composition the owner asked for, in a different skin: his mark at
+92px, then **Sheikh Arsalan** in a heavy sans and *Automation* in an italic serif
+accent, one line of plain copy, and a single 58px URL bar with the button inside it —
+the field is the drop slot. No second call to action.
 
-The mark is the owner's, redrawn rather than recoloured: the "D" of Digital Sheikh
-Nexus as a solid geometric letter with the play triangle punched into its counter, in
-ink and the theme's accent. It is one path and one triangle, so it holds at 30px in a
-phone header and it inherits both themes. No waves, no rings, no crossed tools.
+Details and the plan are two blocks side by side on a laptop and stacked on a phone.
+A run turns a real disc: fine grooves, a vermilion label carrying the mark, and a slow
+rotation that stops with `prefers-reduced-motion`. The progress bar is a transform, so
+the row never reflows while it moves. Results are printed as a **tracklist** — A1 …
+A8, then B1 — with the score, the download and More; More opens the packaging in
+place as sleeve notes: thumbnail text, search title, hashtags, hook, overlays.
 
-It optimises for restraint and for small screens: 44px minimum on every control, a
-16px field text size so iOS never zooms, a two-column stat strip that becomes 2×2, a
-clip row that gives its actions their own line under the title, and no fixed footer.
-It is the direction to pick if the tool should look like a document, not an app.
+The mark is the owner's logo, not a reduction of it: the corner brackets, the crossed
+tools, the record ring, the D and the play triangle are all there, redrawn as clean
+geometry and recoloured to the sleeve — warm white for the frame and the letter,
+vermilion for the ring and the play, the tools held back to 42% so they read as a
+watermark rather than noise. It is the same badge at 36px in the header and at 92px
+on the landing.
+
+It optimises for a first impression and for a settled layout: fixed heights on the
+bar, the URL bar, the tabs and every button; no control changes size when its label
+changes; 44px targets and 16px field text on touch; the tracklist gives its actions
+their own line under the title on a phone.
 
 ## Requirements reinterpreted
 

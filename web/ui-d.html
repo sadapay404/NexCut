@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f6f5f2">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0b0b0d">
 <title>Sheikh Arsalan Automation — NexCut</title>
-<link rel="stylesheet" href="/static/ui-d.css?v=14">
-<script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('saa_theme')==='dark'?'dark':'light')}catch(e){document.documentElement.setAttribute('data-theme','light')}</script>
+<link rel="stylesheet" href="/static/ui-d.css?v=15">
+<script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('saa_theme')==='light'?'light':'dark')}catch(e){}</script>
 </head>
 <body>
 
@@ -17,66 +17,98 @@
   <a href="ui-a.html">A</a><a href="ui-b.html">B</a><a href="ui-c.html">C</a><a href="ui-d.html" aria-current="page">D</a>
 </div>
 
-<header class="top">
-  <div class="wrap top-in">
-    <a class="brand" href="ui-d.html" data-role="brand">
-      <svg class="mark" viewBox="0 0 120 120" aria-hidden="true" focusable="false">
-        <path class="mk-d" d="M40 22a38 38 0 0 1 0 76V22Z" fill="none" stroke-width="13"/>
-        <path class="mk-play" d="M51 44 67 60 51 76Z"/>
-      </svg>
-      <span class="brand-txt">
-        <span class="brand-name">Sheikh Arsalan Automation</span>
-        <span class="brand-sub">Digital Sheikh Nexus · Training Institute</span>
-      </span>
-    </a>
+<header class="bar">
+  <a class="brand" href="ui-d.html" data-role="brand">
+    <svg class="badge" viewBox="0 0 120 120" role="img" aria-label="Sheikh Arsalan Automation">
+      <g class="bd-frame" fill="none" stroke-width="7">
+        <path d="M10 38V10h28"/><path d="M82 10h28v28"/><path d="M110 82v28H82"/><path d="M38 110H10V82"/>
+      </g>
+      <g class="bd-x" fill="none" stroke-width="5">
+        <path d="M26 26 94 94"/><path d="M94 26 26 94"/>
+      </g>
+      <circle class="bd-ring" cx="60" cy="60" r="36" fill="none" stroke-width="3.2"/>
+      <path class="bd-d" d="M43 37a23 23 0 0 1 0 46V37Z" fill="none" stroke-width="8.5"/>
+      <path class="bd-play" d="M50 49 60 60 50 71Z"/>
+    </svg>
+    <span class="brand-txt">
+      <span class="brand-name">NexCut</span>
+      <span class="brand-sub">Sheikh Arsalan Automation</span>
+    </span>
+  </a>
 
-    <div class="top-side">
-      <nav class="tabs" role="tablist" aria-label="Workspace">
-        <button type="button" class="tab" role="tab" data-role="mode" data-mode="cutter" data-action="mode" aria-selected="true">Cutter</button>
-        <button type="button" class="tab" role="tab" data-role="mode" data-mode="downloader" data-action="mode" aria-selected="false">Downloader</button>
-      </nav>
-      <a class="icon-btn" href="https://github.com/sadapay404/NexCut" target="_blank" rel="noreferrer" aria-label="Repository" title="Repository"><span data-icon="github"></span></a>
-      <button class="icon-btn" type="button" data-role="theme-toggle" data-action="theme" aria-label="Toggle theme" title="Toggle theme"></button>
-    </div>
+  <nav class="modes" role="tablist" aria-label="Workspace">
+    <button class="mode-btn" type="button" role="tab" data-role="mode" data-mode="cutter" data-action="mode" aria-selected="true">Cutter</button>
+    <button class="mode-btn" type="button" role="tab" data-role="mode" data-mode="downloader" data-action="mode" aria-selected="false">Downloader<span class="soon">soon</span></button>
+  </nav>
+
+  <div class="bar-tools">
+    <a class="icon-btn" href="https://github.com/sadapay404/NexCut" target="_blank" rel="noreferrer" aria-label="Repository" title="Repository"><span data-icon="github"></span></a>
+    <button class="icon-btn" type="button" data-role="theme-toggle" data-action="theme" aria-label="Toggle theme" title="Toggle theme"></button>
   </div>
 </header>
 
-<main class="wrap main" id="main">
-  <p class="rail">
-    <span class="rail-label" data-role="stage-label">Link</span>
-    <span class="build" data-role="build-tag"></span>
-  </p>
+<main class="frame">
+  <article class="card">
+    <div class="rail">
+      <span class="rail-side">Side A</span>
+      <span class="rail-dot" aria-hidden="true"></span>
+      <span class="rail-stage" data-role="stage-label">Link intake</span>
+      <span class="build" data-role="build-tag"></span>
+    </div>
 
-  <div data-role="pane-cutter">
+    <div data-role="pane-cutter">
 
-    <!-- 1 · landing -->
-    <section class="pane landing" data-role="pane-landing">
-      <h1>Paste a YouTube link.</h1>
-      <p class="sub">NexCut reads the captions, plans the strongest ranges, and cuts each one to a 1080p MP4.</p>
-      <div class="intake">
-        <label class="sr" for="d-link">YouTube link</label>
-        <input id="d-link" data-role="link-input" type="url" inputmode="url" autocomplete="off" spellcheck="false" autocapitalize="off" enterkeyhint="go" placeholder="https://www.youtube.com/watch?v=…">
-        <button class="btn primary" type="button" data-role="fetch-btn" data-action="fetch">Fetch</button>
-      </div>
-      <p class="status" data-role="source-state" aria-live="polite">No source</p>
-    </section>
+      <!-- 1 · landing -->
+      <section class="pane landing" data-role="pane-landing">
+        <div class="hero">
+          <span class="hero-mark">
+            <svg class="badge badge-lg" viewBox="0 0 120 120" aria-hidden="true" focusable="false">
+              <g class="bd-frame" fill="none" stroke-width="7">
+                <path d="M10 38V10h28"/><path d="M82 10h28v28"/><path d="M110 82v28H82"/><path d="M38 110H10V82"/>
+              </g>
+              <g class="bd-x" fill="none" stroke-width="5">
+                <path d="M26 26 94 94"/><path d="M94 26 26 94"/>
+              </g>
+              <circle class="bd-ring" cx="60" cy="60" r="36" fill="none" stroke-width="3.2"/>
+              <path class="bd-d" d="M43 37a23 23 0 0 1 0 46V37Z" fill="none" stroke-width="8.5"/>
+              <path class="bd-play" d="M50 49 60 60 50 71Z"/>
+            </svg>
+          </span>
+          <div class="hero-copy">
+            <h1 class="display">Sheikh Arsalan<br><em>Automation</em></h1>
+            <p class="lede">Paste a YouTube link to pull its captions, plan the clips and cut them to 1080p.</p>
+          </div>
+        </div>
 
-    <!-- 2 · details + plan -->
-    <section class="pane" data-role="pane-details" hidden>
-      <div class="split">
-        <div class="cell">
-          <p class="eyebrow">Source <span class="chip" data-role="detail-badge"></span></p>
-          <h2 class="title" data-role="fact-title">—</h2>
-          <dl class="spec">
+        <div class="intake">
+          <div class="urlbar">
+            <span class="url-ic" data-icon="link"></span>
+            <label class="sr" for="d-link">YouTube link</label>
+            <input id="d-link" data-role="link-input" type="url" inputmode="url" autocomplete="off" spellcheck="false" autocapitalize="off" enterkeyhint="go" placeholder="https://www.youtube.com/watch?v=…">
+            <button class="btn primary" type="button" data-role="fetch-btn" data-action="fetch">Fetch<kbd>↵</kbd></button>
+          </div>
+          <p class="source" data-role="source-state" aria-live="polite">No source</p>
+        </div>
+      </section>
+
+      <!-- 2 · details + plan -->
+      <section class="pane setup" data-role="pane-details" hidden>
+        <div class="block">
+          <div class="block-head">
+            <h2>Details</h2>
+            <span class="tag" data-role="detail-badge"></span>
+          </div>
+          <dl class="facts">
+            <div><dt>Title</dt><dd data-role="fact-title">—</dd></div>
             <div><dt>Channel</dt><dd data-role="fact-channel">—</dd></div>
             <div><dt>Length</dt><dd data-role="fact-length">—</dd></div>
             <div><dt>Captions</dt><dd data-role="fact-captions">—</dd></div>
             <div><dt>Transcript</dt><dd data-role="fact-transcript">—</dd></div>
-            <div><dt>Niche</dt><dd data-role="fact-niche">detected on extract</dd></div>
+            <div><dt>Niche</dt><dd data-role="fact-niche">detected by the model on extract</dd></div>
           </dl>
           <div class="row-actions">
-            <button class="ghost" type="button" data-role="view-transcript" data-action="view-transcript"><span class="ic" data-icon="download"></span>Transcript</button>
-            <button class="ghost" type="button" data-role="own-toggle" data-action="own-toggle" aria-expanded="false" aria-controls="d-own">Own transcript</button>
+            <button class="ghost" type="button" data-role="view-transcript" data-action="view-transcript"><span class="ic" data-icon="download"></span>View transcript</button>
+            <button class="ghost" type="button" data-role="own-toggle" data-action="own-toggle" aria-expanded="false" aria-controls="d-own"><span class="ic" data-icon="captions"></span>Provide own transcript</button>
           </div>
           <div class="own" id="d-own" data-role="own-box" hidden>
             <label class="sr" for="d-own-text">Own transcript</label>
@@ -89,106 +121,123 @@
           </div>
         </div>
 
-        <div class="cell plan">
-          <p class="eyebrow">Plan <span class="chip" data-role="clip-badge">AUTO</span></p>
-
-          <div class="field-row">
-            <label class="label" for="d-count">Clips</label>
-            <input id="d-count" class="mini" type="number" min="5" max="15" step="1" inputmode="numeric" placeholder="AUTO" data-role="clip-count" aria-describedby="d-count-hint">
+        <div class="block config">
+          <div class="block-head">
+            <h2>Plan</h2>
+            <span class="tag" data-role="clip-badge">AUTO</span>
           </div>
-          <p class="hint" id="d-count-hint">Leave blank and the model picks. Range 5–15.</p>
 
-          <div class="field-block-len">
-            <span class="label">Clip length</span>
+          <label class="field" for="d-count">
+            <span class="lbl">Clips</span>
+            <input id="d-count" type="number" min="5" max="15" step="1" inputmode="numeric" placeholder="AUTO" data-role="clip-count" aria-describedby="d-count-hint">
+          </label>
+          <p class="hint" id="d-count-hint">Leave empty for AUTO — the model decides from the video length.</p>
+
+          <div class="field wide">
+            <span class="lbl">Clip length</span>
             <div class="seg" role="group" aria-label="Clip length">
-              <button type="button" class="seg-btn" data-role="len-option" data-len="40-50" aria-pressed="true" data-action="len">40–50 s</button>
-              <button type="button" class="seg-btn" data-role="len-option" data-len="60-90" aria-pressed="false" data-action="len">60–90 s</button>
-              <button type="button" class="seg-btn" data-role="len-option" data-len="90-180" aria-pressed="false" data-action="len">90–180 s</button>
-              <button type="button" class="seg-btn" data-role="len-option" data-len="custom" aria-pressed="false" data-action="len">Custom</button>
+              <button class="seg-btn" type="button" data-role="len-option" data-len="40-50" aria-pressed="true" data-action="len">40–50 s</button>
+              <button class="seg-btn" type="button" data-role="len-option" data-len="60-90" aria-pressed="false" data-action="len">60–90 s</button>
+              <button class="seg-btn" type="button" data-role="len-option" data-len="90-180" aria-pressed="false" data-action="len">90–180 s</button>
+              <button class="seg-btn" type="button" data-role="len-option" data-len="custom" aria-pressed="false" data-action="len">Custom</button>
             </div>
           </div>
+
           <div class="custom" data-role="custom-len" hidden>
-            <label class="field"><span class="label">Min seconds</span><input class="mini full" type="number" min="20" max="590" value="45" data-role="custom-min"></label>
-            <label class="field"><span class="label">Max seconds</span><input class="mini full" type="number" min="25" max="600" value="90" data-role="custom-max"></label>
+            <label class="field"><span class="lbl">Min seconds</span><input type="number" min="20" max="590" value="45" data-role="custom-min"></label>
+            <label class="field"><span class="lbl">Max seconds</span><input type="number" min="25" max="600" value="90" data-role="custom-max"></label>
           </div>
 
-          <button class="btn primary wide" type="button" data-role="run" data-action="run">Extract clips<span class="ic" data-icon="arrow"></span></button>
+          <button class="btn primary wide run" type="button" data-role="run" data-action="run">Extract clips</button>
           <p class="hint" data-role="config-hint">The clips will be in 1080p quality.</p>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- 3 · working -->
-    <section class="pane work" data-role="pane-working" hidden>
-      <p class="eyebrow">Run</p>
-      <div class="work-head">
-        <h2 data-role="stage-text">Queued</h2>
-        <span class="pct" data-role="pct-text">0%</span>
-      </div>
-      <div class="track" aria-hidden="true"><i data-role="progress-fill"></i></div>
-      <pre class="log" data-role="stage-log" aria-live="polite"></pre>
-      <div class="credits-slot" data-role="credits-slot"></div>
-    </section>
-
-    <!-- 4 · failure -->
-    <section class="pane error" data-role="pane-error" hidden>
-      <p class="eyebrow">Stopped</p>
-      <h2 class="title" data-role="error-title">Run failed</h2>
-      <p class="sub" data-role="error-message"></p>
-      <p class="callout" data-role="error-hint" hidden></p>
-      <div class="row-actions">
-        <button class="btn primary" type="button" data-role="retry" data-action="retry">Try again</button>
-        <button class="btn" type="button" data-role="new-link" data-action="new-link">New link</button>
-        <button class="ghost" type="button" data-role="copy-details" data-action="copy-details">Copy details</button>
-      </div>
-      <details class="raw" data-role="error-raw" hidden><summary>What the model returned</summary><pre></pre></details>
-    </section>
-
-    <!-- 5 · results -->
-    <section class="pane" data-role="pane-results" hidden>
-      <p class="eyebrow">Clips</p>
-      <h2 class="title" data-role="res-title">—</h2>
-      <p class="meta" data-role="res-meta"></p>
-
-      <dl class="stats">
-        <div><dt>found</dt><dd data-role="stat-found">0</dd></div>
-        <div><dt>kept</dt><dd data-role="stat-kept">0</dd></div>
-        <div><dt>rejected</dt><dd data-role="stat-rejected">0</dd></div>
-        <div><dt>asked</dt><dd data-role="stat-asked">AUTO</dd></div>
-      </dl>
-
-      <ol class="clips" data-role="clip-list"></ol>
-
-      <div class="run-foot">
-        <div class="run-tools">
-          <label class="check"><input type="checkbox" data-role="zip-toggle"><span>One ZIP</span></label>
-          <button class="ghost" type="button" data-role="copy-answer" data-action="copy-answer">Copy JSON</button>
-          <button class="ghost" type="button" data-role="new-run" data-action="new-link">New link</button>
+      <!-- 3 · working -->
+      <section class="pane work" data-role="pane-working" hidden>
+        <div class="platter">
+          <div class="disc is-spinning" aria-hidden="true">
+            <span class="disc-label">
+              <svg viewBox="0 0 120 120" focusable="false">
+                <path class="dl-d" d="M43 37a23 23 0 0 1 0 46V37Z" fill="none" stroke-width="13"/>
+                <path class="dl-play" d="M51 49 61 60 51 71Z"/>
+              </svg>
+            </span>
+          </div>
+          <div class="work-copy">
+            <p class="micro">Pressing</p>
+            <h2 data-role="stage-text">Queued</h2>
+            <div class="progress" aria-hidden="true"><i data-role="progress-fill"></i></div>
+            <p class="micro"><b data-role="pct-text">0%</b></p>
+          </div>
         </div>
-        <div class="cut">
-          <span class="cut-label"><span class="ic" data-icon="scissors"></span>Cut 1080p</span>
-          <div class="track thin" data-role="cut-track" hidden><i data-role="cut-fill"></i></div>
-          <span class="cut-state" data-role="cut-state" aria-live="polite"></span>
-          <a class="btn small" data-role="zip-link" href="#" hidden download>Download ZIP</a>
-        </div>
-      </div>
-    </section>
-  </div>
+        <pre class="log" data-role="stage-log" aria-live="polite"></pre>
+        <div class="credits-slot" data-role="credits-slot"></div>
+      </section>
 
-  <!-- downloader: placeholder, deliberately quiet -->
-  <section class="pane" data-role="pane-downloader" hidden>
-    <p class="eyebrow">Downloader</p>
-    <h2 class="title">Not built yet.</h2>
-    <p class="sub">The cutter is the only working tool for now. Full-video downloads will appear here.</p>
-  </section>
+      <!-- 4 · failure -->
+      <section class="pane err" data-role="pane-error" hidden>
+        <p class="micro">Stopped</p>
+        <h2 class="err-title" data-role="error-title">Run failed</h2>
+        <p class="lede" data-role="error-message"></p>
+        <p class="callout" data-role="error-hint" hidden></p>
+        <div class="row-actions">
+          <button class="btn primary" type="button" data-role="retry" data-action="retry">Try again</button>
+          <button class="btn" type="button" data-role="new-link" data-action="new-link">New link</button>
+          <button class="ghost" type="button" data-role="copy-details" data-action="copy-details"><span class="ic" data-icon="copy"></span>Copy details</button>
+        </div>
+        <details class="raw" data-role="error-raw" hidden><summary>What the model returned</summary><pre></pre></details>
+      </section>
+
+      <!-- 5 · results -->
+      <section class="pane results" data-role="pane-results" hidden>
+        <div class="res-head">
+          <div class="res-id">
+            <p class="micro">Tracklist</p>
+            <h2 data-role="res-title">—</h2>
+            <p class="res-meta" data-role="res-meta"></p>
+          </div>
+          <dl class="stats">
+            <div><dt>found</dt><dd data-role="stat-found">0</dd></div>
+            <div><dt>clips</dt><dd data-role="stat-kept">0</dd></div>
+            <div><dt>rejected</dt><dd data-role="stat-rejected">0</dd></div>
+            <div><dt>asked</dt><dd data-role="stat-asked">AUTO</dd></div>
+          </dl>
+        </div>
+
+        <ol class="tracks" data-role="clip-list"></ol>
+
+        <div class="res-foot">
+          <div class="foot-tools">
+            <label class="check"><input type="checkbox" data-role="zip-toggle"><span>Download as ZIP</span></label>
+            <button class="ghost" type="button" data-role="copy-answer" data-action="copy-answer"><span class="ic" data-icon="copy"></span>Copy answer</button>
+            <button class="ghost" type="button" data-role="new-run" data-action="new-link">New link</button>
+          </div>
+          <div class="cut">
+            <span class="cut-label"><span class="ic" data-icon="scissors"></span>Cut · 1080p</span>
+            <div class="progress thin" data-role="cut-track" hidden><i data-role="cut-fill"></i></div>
+            <span class="cut-state" data-role="cut-state" aria-live="polite"></span>
+            <a class="btn small" data-role="zip-link" href="#" hidden download>Download ZIP</a>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- downloader: placeholder, deliberately quiet -->
+    <section class="pane" data-role="pane-downloader" hidden>
+      <p class="micro">Downloader</p>
+      <h2 class="err-title">Not built yet.</h2>
+      <p class="lede">The cutter is the only working tool for now. Full-video downloads will appear here.</p>
+    </section>
+  </article>
 </main>
 
-<footer class="wrap foot" data-role="credits-home">
+<footer class="foot" data-role="credits-home">
   <p class="credits" data-role="credits"><span>Proudly Created by <b>Sheikh Arsalan</b> <span class="join">in Collaboration with</span> <b>Mubashir</b></span></p>
 </footer>
 
 <div class="toasts" data-role="toasts" aria-live="polite"></div>
-<script src="/static/core.js?v=14"></script>
-<script src="/static/ui-d.js?v=14"></script>
+<script src="/static/core.js?v=15"></script>
+<script src="/static/ui-d.js?v=15"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-/* NexCut — direction D, "Ledger".
+/* NexCut — direction D, "Sleeve".
    Layout and interaction only. Flow, state and the API live in core.js. */
 (function () {
   "use strict";
@@ -7,7 +7,7 @@
   var RS = function (name) { return N.roles(name); };
 
   var STAGES = ["landing", "details", "working", "error", "results"];
-  var RAIL = { landing: "Link", details: "Source & plan", working: "Working", error: "Stopped", results: "Clips" };
+  var RAIL = { landing: "Link intake", details: "Details & plan", working: "Working", error: "Stopped", results: "Tracklist" };
 
   var app = null;
   var open = {};            // clip index → packaging open
@@ -20,7 +20,11 @@
   var maxClips = 15;
   var inited = false;
 
-  function pad(n) { return String(n).padStart(2, "0"); }
+  /* clips read as record sides: A1 … A8, then B1 */
+  function trackNo(i) {
+    var n = i + 1;
+    return n <= 8 ? "A" + n : "B" + (n - 8);
+  }
 
   function selectedLen() {
     var on = RS("len-option").filter(function (b) { return b.getAttribute("aria-pressed") === "true"; })[0];
@@ -51,9 +55,11 @@
     RS("mode").forEach(function (b) {
       b.setAttribute("aria-selected", b.getAttribute("data-mode") === mode ? "true" : "false");
     });
+    var side = document.querySelector(".rail-side");
+    if (side) side.textContent = mode === "downloader" ? "Side B" : "Side A";
   }
 
-  /* the packaging block, shared shape with the other directions */
+  /* sleeve notes: the packaging block, same shape as the other directions */
   function packagingNode(pack) {
     var wrap = N.el("div", "pack");
     wrap.setAttribute("data-role", "packaging");
@@ -144,11 +150,11 @@
     }
     clips.forEach(function (clip, i) {
       var isOpen = Boolean(open[i]);
-      var li = N.el("li", "entry" + (isOpen ? " is-open" : ""));
+      var li = N.el("li", "track" + (isOpen ? " is-open" : ""));
       li.setAttribute("data-role", "clip-item");
 
-      var row = N.el("div", "row");
-      row.appendChild(N.el("span", "num", pad(clip.n)));
+      var row = N.el("div", "track-row");
+      row.appendChild(N.el("span", "track-n", trackNo(i)));
       row.appendChild(N.el("span", "t", clip.pack.title));
       row.appendChild(N.el("span", "score" + (clip.pack.avg !== null && clip.pack.avg >= 8 ? " hi" : ""), clip.pack.avgText));
       row.appendChild(actionFor(i));
@@ -245,9 +251,10 @@
 
     setBusy: function (busy) { R("run").disabled = Boolean(busy); },
 
+    /* the bar is a transform, so the row never reflows while it moves */
     renderProgress: function (p) {
       var pct = Math.max(0, Math.min(100, Math.round(p.pct) || 0));
-      R("progress-fill").style.width = pct + "%";
+      R("progress-fill").style.transform = "scaleX(" + (pct / 100) + ")";
       N.put("pct-text", pct + "%");
       N.put("stage-text", p.stage || "Working");
       var log = R("stage-log");
@@ -291,7 +298,7 @@
       var state = N.put("cut-state", cut.text || "");
       state.setAttribute("data-tone", cut.status === "error" ? "bad" : cut.status === "done" ? "ok" : cut.status === "warn" ? "warn" : "");
       R("cut-track").hidden = cut.status !== "progress";
-      R("cut-fill").style.width = Math.max(0, Math.min(100, Number(cut.pct) || 0)) + "%";
+      R("cut-fill").style.transform = "scaleX(" + (Math.max(0, Math.min(100, Number(cut.pct) || 0)) / 100) + ")";
       lastFiles = c.files || [];
       lastZip = c.zipUrl || "";
       renderList();
