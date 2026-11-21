@@ -1,0 +1,12 @@
+{
+  "name": "saa-clip-studio-ui",
+  "private": true,
+  "description": "Headless UI smoke test + static UI audit for the Clip Studio frontend",
+  "scripts": {
+    "test:ui": "node tools/ui_smoke.js",
+    "audit:ui": "node tools/ui_audit.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}

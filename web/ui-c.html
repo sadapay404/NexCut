@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0f0e0d">
+<title>NexCut — UI C · Cards</title>
+<link rel="stylesheet" href="/static/ui-c.css?v=13">
+<script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('saa_theme')==='light'?'light':'dark')}catch(e){}</script>
+</head>
+<body>
+
+<!-- preview switcher: outside the product, deliberately quiet -->
+<div class="switch" role="navigation" aria-label="Interface preview">
+  <span>Preview</span>
+  <a href="ui-a.html">UI A</a><span aria-hidden="true">|</span><a href="ui-b.html">B</a><span aria-hidden="true">|</span><a href="ui-c.html" aria-current="page">C</a>
+</div>
+
+<header class="top">
+  <a class="brand" href="ui-c.html" data-role="brand"><span class="logo" data-icon="scissors"></span>NexCut</a>
+  <nav class="pill-tabs" role="tablist" aria-label="Workspace">
+    <button type="button" role="tab" data-role="mode" data-mode="cutter" data-action="mode" aria-selected="true">Cutter</button>
+    <button type="button" role="tab" data-role="mode" data-mode="downloader" data-action="mode" aria-selected="false">Downloader</button>
+  </nav>
+  <div class="tools">
+    <span class="ver" data-role="build-tag"></span>
+    <a class="tool" href="https://github.com/sadapay404/NexCut" target="_blank" rel="noreferrer" aria-label="Repository" title="Repository"><span data-icon="github"></span></a>
+    <button class="tool" type="button" data-role="theme-toggle" data-action="theme" aria-label="Toggle theme" title="Toggle theme"></button>
+  </div>
+</header>
+
+<div data-role="pane-cutter" class="cutter">
+  <ol class="steps" aria-label="Progress">
+    <li data-step="1"><span class="dot">1</span><span class="lbl">Link</span></li>
+    <li data-step="2"><span class="dot">2</span><span class="lbl">Details</span></li>
+    <li data-step="3"><span class="dot">3</span><span class="lbl">Plan</span></li>
+    <li data-step="4"><span class="dot">4</span><span class="lbl">Extract</span></li>
+    <li data-step="5"><span class="dot">5</span><span class="lbl">Clips</span></li>
+  </ol>
+
+  <main class="stage">
+
+    <!-- 1 · link -->
+    <section class="card hero" data-role="pane-landing">
+      <h1>Start with a YouTube link</h1>
+      <p class="lede">Paste it here. NexCut reads the captions and proposes the clips.</p>
+      <div class="field-row">
+        <label class="sr" for="c-link">YouTube link</label>
+        <input id="c-link" data-role="link-input" type="url" inputmode="url" autocomplete="off" spellcheck="false" autocapitalize="off" enterkeyhint="go" placeholder="https://www.youtube.com/watch?v=…">
+        <button class="btn primary" type="button" data-role="fetch-btn" data-action="fetch">Fetch</button>
+      </div>
+      <p class="status" data-role="source-state" aria-live="polite">No source</p>
+    </section>
+
+    <!-- 2 · details, then 3 · plan -->
+    <section data-role="pane-details" hidden>
+      <article class="card" data-role="card-details">
+        <div class="video-head">
+          <span class="avatar" data-role="avatar" aria-hidden="true">N</span>
+          <div class="video-title">
+            <h2 data-role="fact-title">—</h2>
+            <p class="muted" data-role="fact-channel">—</p>
+          </div>
+          <span class="badge" data-role="detail-badge">ready</span>
+        </div>
+        <dl class="facts">
+          <div><dt>Length</dt><dd data-role="fact-length">—</dd></div>
+          <div><dt>Captions</dt><dd data-role="fact-captions">—</dd></div>
+          <div class="wide"><dt>Transcript</dt><dd data-role="fact-transcript">—</dd></div>
+          <div class="wide"><dt>Niche</dt><dd data-role="fact-niche">detected by the model on extract</dd></div>
+        </dl>
+        <div class="row-btns">
+          <button class="btn ghost" type="button" data-role="view-transcript" data-action="view-transcript"><span data-icon="download"></span>Get transcript</button>
+          <button class="btn ghost" type="button" data-role="own-toggle" data-action="own-toggle" aria-expanded="false" aria-controls="c-own"><span data-icon="captions"></span>Use my own</button>
+        </div>
+        <div class="own" id="c-own" data-role="own-box" hidden>
+          <label class="sr" for="c-own-text">Own transcript</label>
+          <textarea id="c-own-text" data-role="transcript-input" spellcheck="false" placeholder="00:00:08 - line as spoken&#10;00:00:16 - next line"></textarea>
+          <div class="row-btns">
+            <button class="btn ghost" type="button" data-role="upload-btn" data-action="upload"><span data-icon="upload"></span>Upload .txt / .srt / .vtt</button>
+            <span class="note" data-role="own-note">One timestamp per line.</span>
+          </div>
+          <input type="file" accept=".txt,.srt,.vtt" data-role="file-input" hidden>
+        </div>
+        <button class="btn primary xl" type="button" data-role="plan-next" data-action="plan-next">Choose clip plan<span data-icon="arrow"></span></button>
+      </article>
+
+      <article class="card" data-role="pane-plan" hidden>
+        <div class="plan-head">
+          <button class="btn ghost small" type="button" data-role="plan-back" data-action="plan-back"><span data-icon="back"></span>Back</button>
+          <span class="badge" data-role="clip-badge">AUTO</span>
+        </div>
+        <h2>How many clips?</h2>
+        <p class="muted">Leave it on AUTO and the model decides from the video length.</p>
+        <div class="counter">
+          <button class="round" type="button" data-action="step" data-step="-1" aria-label="One fewer clip"><span data-icon="minus"></span></button>
+          <label class="sr" for="c-count">Number of clips</label>
+          <input id="c-count" data-role="clip-count" type="number" min="5" max="15" step="1" inputmode="numeric" placeholder="AUTO">
+          <button class="round" type="button" data-action="step" data-step="1" aria-label="One more clip"><span data-icon="plus"></span></button>
+        </div>
+        <p class="hint">Between 5 and 15 clips.</p>
+
+        <h2 class="sub-h">How long should each clip be?</h2>
+        <div class="opt-grid" role="group" aria-label="Clip length">
+          <button type="button" class="opt" data-role="len-option" data-len="40-50" aria-pressed="true" data-action="len"><b>40–50 s</b><span>Short hook</span></button>
+          <button type="button" class="opt" data-role="len-option" data-len="60-90" aria-pressed="false" data-action="len"><b>60–90 s</b><span>Balanced</span></button>
+          <button type="button" class="opt" data-role="len-option" data-len="90-180" aria-pressed="false" data-action="len"><b>90–180 s</b><span>Full story</span></button>
+          <button type="button" class="opt" data-role="len-option" data-len="custom" aria-pressed="false" data-action="len"><b>Custom</b><span>Your range</span></button>
+        </div>
+        <div class="custom" data-role="custom-len" hidden>
+          <label class="field"><span>Min seconds</span><input type="number" min="20" max="590" value="45" data-role="custom-min"></label>
+          <label class="field"><span>Max seconds</span><input type="number" min="25" max="600" value="90" data-role="custom-max"></label>
+        </div>
+
+        <button class="btn primary xl" type="button" data-role="run" data-action="run"><span data-icon="scissors"></span>Extract clips</button>
+        <p class="hint center" data-role="config-hint">The clips will be in 1080p quality.</p>
+      </article>
+    </section>
+
+    <!-- 4 · working -->
+    <section class="card working" data-role="pane-working" hidden>
+      <div class="ring" data-role="ring" style="--p:0">
+        <div class="ring-in"><span data-role="pct-text">0%</span></div>
+      </div>
+      <h2 class="center" data-role="stage-text">Queued</h2>
+      <div class="progress" aria-hidden="true"><i data-role="progress-fill"></i></div>
+      <p class="muted center">Hang tight. The model reads the transcript, then the clips are cut at 1080p.</p>
+      <ol class="log-list" data-role="stage-log" aria-live="polite"></ol>
+      <div class="credits-slot" data-role="credits-slot"></div>
+    </section>
+
+    <!-- 4b · failure -->
+    <section class="card fault" data-role="pane-error" hidden>
+      <div class="fault-ico" aria-hidden="true"><span data-icon="alert"></span></div>
+      <h2 class="center" data-role="error-title">Run failed</h2>
+      <p class="center" data-role="error-message"></p>
+      <p class="hint center" data-role="error-hint" hidden></p>
+      <div class="fault-actions">
+        <button class="btn primary xl" type="button" data-role="retry" data-action="retry">Try again</button>
+        <div class="row-btns center-row">
+          <button class="btn ghost" type="button" data-role="new-link" data-action="new-link">New link</button>
+          <button class="btn ghost" type="button" data-role="copy-details" data-action="copy-details"><span data-icon="copy"></span>Copy details</button>
+        </div>
+      </div>
+      <details class="raw" data-role="error-raw" hidden><summary>What the model returned</summary><pre></pre></details>
+    </section>
+
+    <!-- 5 · results -->
+    <section data-role="pane-results" hidden>
+      <article class="card results-head">
+        <p class="kicker">Your clips are ready</p>
+        <h2 data-role="res-title">—</h2>
+        <p class="muted" data-role="res-meta"></p>
+        <div class="tiles">
+          <div class="tile"><b data-role="stat-found">0</b><span>found</span></div>
+          <div class="tile"><b data-role="stat-kept">0</b><span>clips</span></div>
+          <div class="tile"><b data-role="stat-rejected">0</b><span>rejected</span></div>
+          <div class="tile"><b data-role="stat-asked">AUTO</b><span>asked for</span></div>
+        </div>
+        <div class="zip-row">
+          <div>
+            <p class="zip-title">Download as ZIP</p>
+            <p class="muted small">One file with every MP4 and a details.md summary.</p>
+          </div>
+          <label class="toggle"><input type="checkbox" data-role="zip-toggle"><span class="sr">Download as ZIP</span></label>
+        </div>
+        <div class="row-btns">
+          <button class="btn ghost" type="button" data-role="copy-answer" data-action="copy-answer"><span data-icon="copy"></span>Copy answer JSON</button>
+          <button class="btn ghost" type="button" data-role="new-run" data-action="new-link">New link</button>
+        </div>
+      </article>
+
+      <ol class="clips" data-role="clip-list"></ol>
+
+      <article class="card cut-card">
+        <div class="cut-top">
+          <span class="kicker">Cutting at 1080p</span>
+          <span class="note" data-role="cut-state" aria-live="polite"></span>
+        </div>
+        <div class="progress" data-role="cut-track" hidden><i data-role="cut-fill"></i></div>
+        <a class="btn primary xl" data-role="zip-link" href="#" hidden download><span data-icon="download"></span>Download ZIP</a>
+      </article>
+    </section>
+  </main>
+
+
+</div>
+
+  <!-- downloader: placeholder, deliberately quiet -->
+  <section class="stage" data-role="pane-downloader" hidden>
+    <article class="card hero">
+      <p class="kicker">Downloader</p>
+      <h1>Not built yet</h1>
+      <p class="lede">The cutter is the only working tool for now. Full-video downloads will appear here.</p>
+    </article>
+  </section>
+
+<footer class="foot" data-role="credits-home">
+  <p class="credits" data-role="credits"><span>Proudly Created by <b>Sheikh Arsalan</b> <span class="amp">in Collaboration with</span> <b>Mubashir</b></span></p>
+</footer>
+
+<div class="toasts" data-role="toasts" aria-live="polite"></div>
+<script src="/static/core.js?v=13"></script>
+<script src="/static/ui-c.js?v=13"></script>
+</body>
+</html>

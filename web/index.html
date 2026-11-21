@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NexCut — Sheikh Arsalan Automation</title>
+<script>
+  // /?ui=1|2|3|4 opens one of the four directions; bare / opens UI D while the
+  // owner compares them. ?ui=2 gives the console (the long-standing default).
+  (function () {
+    var map = { "1": "ui-a.html", "2": "ui-b.html", "3": "ui-c.html", "4": "ui-d.html", a: "ui-a.html", b: "ui-b.html", c: "ui-c.html", d: "ui-d.html" };
+    var pick = new URLSearchParams(location.search).get("ui");
+    location.replace(map[pick] || "ui-d.html");
+  })();
+</script>
+</head>
+<body>
+<p>Opening Sheikh Arsalan Automation — NexCut… <a href="ui-a.html">UI A</a> · <a href="ui-b.html">UI B</a> · <a href="ui-c.html">UI C</a> · <a href="ui-d.html">UI D</a></p>
+</body>
+</html>

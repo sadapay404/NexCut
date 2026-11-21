@@ -1,0 +1,139 @@
+{
+  "sweep": {
+    "window": "E",
+    "ranges": "00:00:00-00:01:03",
+    "longlist": 7,
+    "cleared": 1
+  },
+  "longlist": [
+    {
+      "start": "00:00:09",
+      "gist": "door log vs camera"
+    }
+  ],
+  "clips": [
+    {
+      "n": 1,
+      "hook_summary": "door logged locked, camera says otherwise",
+      "start_sec": 9,
+      "start_stamp": "00:00:09",
+      "start_sentence": "The night manager logged the door as locked at 11:40.",
+      "end_sec": 63,
+      "end_stamp": "00:01:03",
+      "end_sentence": "That badge belonged to a man who had been off shift for two weeks.",
+      "duration_line": "0 min 54 sec",
+      "titles": {
+        "clickbait": "The door was locked. The camera disagrees.",
+        "search": "hotel third floor case",
+        "debate": "Who had the badge?"
+      },
+      "scores": {
+        "curiosity": 9,
+        "stakes": 8.5,
+        "specificity": 9,
+        "speed": 8,
+        "avg": 8.6
+      },
+      "verbal_hook": "locked at 11:40, open at 11:52",
+      "ending": "unresolved",
+      "why_it_works": "two facts that cannot both be true",
+      "share_trigger": "theory bait",
+      "safety": "none",
+      "overlays": [
+        {
+          "offset": "00:03",
+          "text": "LOCKED 11:40"
+        }
+      ],
+      "sfx": "low pulse",
+      "captions": "bold amber keyword",
+      "upload_caption": "both can't be true",
+      "hashtags": "#truecrime #hotel",
+      "pinned_comment": "who else had access?",
+      "transcript_ts": "x",
+      "transcript": "x"
+    },
+    {
+      "n": 2,
+      "hook_summary": "paraphrased opener",
+      "start_sec": 9,
+      "start_stamp": "00:00:09",
+      "start_sentence": "The manager said he stayed at his desk the whole time.",
+      "end_sec": 63,
+      "end_stamp": "00:01:03",
+      "end_sentence": "That badge belonged to a man who had been off shift for two weeks.",
+      "duration_line": "0 min 54 sec",
+      "titles": {
+        "clickbait": "The door was locked. The camera disagrees.",
+        "search": "hotel third floor case",
+        "debate": "Who had the badge?"
+      },
+      "scores": {
+        "curiosity": 8.5,
+        "stakes": 8,
+        "specificity": 8,
+        "speed": 8,
+        "avg": 8.1
+      },
+      "verbal_hook": "locked at 11:40, open at 11:52",
+      "ending": "unresolved",
+      "why_it_works": "two facts that cannot both be true",
+      "share_trigger": "theory bait",
+      "safety": "none",
+      "overlays": [
+        {
+          "offset": "00:03",
+          "text": "LOCKED 11:40"
+        }
+      ],
+      "sfx": "low pulse",
+      "captions": "bold amber keyword",
+      "upload_caption": "both can't be true",
+      "hashtags": "#truecrime #hotel",
+      "pinned_comment": "who else had access?",
+      "transcript_ts": "x",
+      "transcript": "x"
+    },
+    {
+      "n": 3,
+      "hook_summary": "thin clip",
+      "start_sec": 45,
+      "start_stamp": "00:00:45",
+      "start_sentence": "A guest reported hearing two voices in an empty corridor.",
+      "end_sec": 54,
+      "end_stamp": "00:00:54",
+      "end_sentence": "The badge reader logged a second entry at 12:04.",
+      "duration_line": "0 min 9 sec",
+      "titles": {
+        "clickbait": "The door was locked. The camera disagrees.",
+        "search": "hotel third floor case",
+        "debate": "Who had the badge?"
+      },
+      "scores": {
+        "curiosity": 6,
+        "stakes": 6,
+        "specificity": 6,
+        "speed": 6,
+        "avg": 6.0
+      },
+      "verbal_hook": "locked at 11:40, open at 11:52",
+      "ending": "unresolved",
+      "why_it_works": "two facts that cannot both be true",
+      "share_trigger": "theory bait",
+      "safety": "none",
+      "overlays": [
+        {
+          "offset": "00:03",
+          "text": "LOCKED 11:40"
+        }
+      ],
+      "sfx": "low pulse",
+      "captions": "bold amber keyword",
+      "upload_caption": "both can't be true",
+      "hashtags": "#truecrime #hotel",
+      "pinned_comment": "who else had access?",
+      "transcript_ts": "x",
+      "transcript": "x"
+    }
+  ]
+}

@@ -1,0 +1,705 @@
+"""Model providers.
+
+    GeminiProvider  : Google Generative Language API (stdlib HTTP, no SDK)
+    OpenAIProvider  : any OpenAI-compatible chat endpoint (OpenAI, OpenRouter,
+                      Groq, Together, LM Studio, Ollama's /v1 ...)
+    StubProvider    : offline, deterministic — builds a contract-valid report
+                      from the transcript so the app runs with no key at all
+
+The prompt is *not* built here any more: `nexcut.prompts.compose()` produces
+(system, user) from your master prompt file, and providers only transport it.
+That is what lets you swap the prompt without touching code.
+
+Failover is explicit: chosen model -> other models (if cascade) -> backup key.
+Every step is named in the error so a failure is diagnosable from the UI text.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import socket
+import urllib.error
+import urllib.request
+
+from .parse import ExtractError, TimeoutError_
+from .schema import WINDOWS, hms
+
+GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+OPENAI_ENDPOINT = "{base}/chat/completions"
+
+# Newest first: Google retires ids for accounts that never used them, and a 404
+# now self-heals (see _suggested_model), so this list is a starting point, not law.
+GEMINI_MODELS = [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.5-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+]
+OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"]
+
+# Groq speaks the OpenAI wire format; ids drift, so `check_key.py --list` is truth.
+GROQ_BASE = "https://api.groq.com/openai/v1"
+# Cloudflare Workers AI: account-scoped URL, bearer token, {result:{response}}.
+CLOUDFLARE_BASE = "https://api.cloudflare.com/client/v4/accounts/{account}/ai"
+CLOUDFLARE_MODELS = [
+    "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "@cf/meta/llama-4-scout-17b-16e-instruct",
+    "@cf/qwen/qwq-32b",
+    "@cf/openai/gpt-oss-120b",
+]
+
+# Groq moves models between plans without notice: llama-3.3-70b-versatile and
+# llama-3.1-8b-instant are Enterprise-only now; gpt-oss is what a normal key can
+# use. When a model is refused the provider is asked what it does serve
+# (OpenAIProvider._fallback_model) instead of making the user edit .env.
+GROQ_MODELS = [
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "qwen/qwen3.8-27b",
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+]
+
+TIMEOUT_MSG = "Gemini is slow right now — the request timed out before it answered."
+
+
+def provider_kind() -> str:
+    kind = (os.environ.get("NEXCUT_PROVIDER") or "stub").strip().lower()
+    if kind in ("groq",):
+        return "openai"
+    if kind in ("cloudflare", "workers-ai", "cf", "workersai"):
+        return "cloudflare"
+    return kind
+
+
+def provider_label() -> str:
+    """What the user called it — 'groq' stays groq in messages and logs."""
+    return (os.environ.get("NEXCUT_PROVIDER") or "stub").strip().lower()
+
+
+# Cloudflare-fronted APIs (Groq among them) reject the stdlib default
+# "Python-urllib/3.x" signature with error 1010.
+DEFAULT_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/126.0.0.0 Safari/537.36")
+
+
+def user_agent() -> str:
+    return (os.environ.get("NEXCUT_USER_AGENT") or DEFAULT_UA).strip()
+
+
+def is_edge_block(detail: str) -> bool:
+    """Cloudflare/WAF refusal: about the client signature, not the key."""
+    low = (detail or "").lower()
+    return ("error code: 1010" in low or "cloudflare" in low
+            or "just a moment" in low or "<html" in low)
+
+
+def provider_env_hint() -> str:
+    if provider_label() == "groq":
+        return ("Check the key at console.groq.com -> API Keys, then restart the "
+                "server so .env is re-read.")
+    if provider_label() == "openai":
+        return ("Check the key at platform.openai.com -> API keys, then restart the "
+                "server so .env is re-read.")
+    return ("Check the key in AI Studio and that the Generative Language API is "
+            "enabled, then restart the server so .env is re-read.")
+
+
+def parse_keys(*sources: str) -> list[str]:
+    """Deduplicated key list from any mix of comma, space and newline separated."""
+    out: list[str] = []
+    for raw in sources:
+        for part in re.split(r"[,\s]+", raw or ""):
+            key = part.strip().strip('"').strip("'")
+            if key and key not in out:
+                out.append(key)
+    return out
+
+
+# the providers' own conventional names, so pasted credentials just work
+PROVIDER_KEY_VARS = {
+    "cloudflare": ("CLOUDFLARE_API_TOKEN",),
+    "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+    "groq": ("GROQ_API_KEY",),
+    "openai": ("OPENAI_API_KEY",),
+}
+
+
+def env_keys() -> list[str]:
+    """NEXCUT_API_KEY, the provider's own variable, backup, then NEXCUT_API_KEYS."""
+    kind = provider_kind()
+    native = PROVIDER_KEY_VARS.get(provider_label() if provider_label() in PROVIDER_KEY_VARS
+                                  else kind, ())
+    return parse_keys(
+        os.environ.get("NEXCUT_API_KEY", ""),
+        *[os.environ.get(name, "") for name in native],
+        os.environ.get("NEXCUT_BACKUP_KEY", ""),
+        os.environ.get("NEXCUT_API_KEYS", ""),
+    )
+
+
+def cloudflare_account() -> str:
+    return (os.environ.get("NEXCUT_CF_ACCOUNT")
+            or os.environ.get("CLOUDFLARE_ACCOUNT_ID")
+            or "").strip()
+
+
+def attempt_budget() -> int:
+    """Upper bound on provider calls per extraction — dead-key lists stay cheap."""
+    try:
+        return max(1, int(os.environ.get("NEXCUT_MAX_ATTEMPTS", "12")))
+    except ValueError:
+        return 12
+
+
+def max_tokens(default: int = 4096) -> int:
+    """Output budget per call.
+
+    Workers AI defaults max_tokens to 256 — a clip report never fits in that, so
+    the model gets cut off mid-object and the answer looks malformed. Every
+    provider now states the budget explicitly.
+    """
+    try:
+        value = int(os.environ.get("NEXCUT_MAX_TOKENS", "").strip())
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def request_timeout() -> int:
+    try:
+        return max(10, int(os.environ.get("NEXCUT_TIMEOUT", "180")))
+    except ValueError:
+        return 180
+
+
+DEFAULT_GEMINI_MODEL = GEMINI_MODELS[0]
+
+# "…please update your code to use models/gemini-3.8-flash…"
+_SUGGESTION = re.compile(r"use (?:the )?models?/([A-Za-z0-9._\-]+)")
+
+
+def _suggested_model(message: str) -> str:
+    """The replacement id Google names in a retired-model 404, or ''."""
+    found = _SUGGESTION.search(message or "")
+    return found.group(1) if found else ""
+
+
+def default_model() -> str:
+    """NEXCUT_MODEL, else the head of NEXCUT_MODELS, else the catalog head."""
+    explicit = (os.environ.get("NEXCUT_MODEL") or "").strip()
+    if explicit:
+        return explicit
+    return model_catalog()[0]["id"]
+
+
+def health_candidates(limit: int = 3) -> list[str]:
+    """Models worth trying for a key check: the default, then the catalogue."""
+    first = default_model()
+    rest = [m["id"] for m in model_catalog() if m["id"] != first]
+    return [m for m in ([first] + rest) if m != "offline-demo"][:limit]
+
+
+def model_catalog() -> list[dict[str, str]]:
+    raw = os.environ.get("NEXCUT_MODELS")
+    if raw:
+        ids = [m.strip() for m in raw.split(",") if m.strip()]
+    elif provider_kind() == "openai":
+        ids = list(GROQ_MODELS if provider_label() == "groq" else OPENAI_MODELS)
+    elif provider_kind() == "cloudflare":
+        ids = list(CLOUDFLARE_MODELS)
+    elif provider_kind() == "gemini":
+        ids = list(GEMINI_MODELS)
+    else:
+        ids = ["offline-demo"]
+    return [{"id": m, "label": m} for m in ids]
+
+
+def resolve_model(alias: str) -> str:
+    try:
+        mapping = json.loads(os.environ.get("NEXCUT_MODEL_MAP", "") or "{}")
+    except json.JSONDecodeError:
+        mapping = {}
+    return mapping.get(alias, alias)
+
+
+class ProviderError(ExtractError):
+    """Non-retryable unless `retryable` is set (then the cascade moves on)."""
+
+    def __init__(self, message: str, *, retryable: bool = False,
+                 hint: str = "", key_dead: bool = False) -> None:
+        super().__init__(message)
+        self.retryable = retryable
+        self.hint = hint
+        self.key_dead = key_dead
+
+
+class _HttpProvider:
+    """Shared transport: one attempt, precise error classification."""
+
+    name = "http"
+
+    def __init__(self, api_key: str, *, backup_key: str = "", timeout: int | None = None) -> None:
+        self.api_key = (api_key or "").strip()
+        self.backup_key = (backup_key or os.environ.get("NEXCUT_BACKUP_KEY", "")).strip()
+        self.timeout = timeout or request_timeout()
+
+    # subclass hook -----------------------------------------------------
+    def _attempt(self, model: str, system: str, user: str, key: str) -> str:
+        raise NotImplementedError
+
+    def _post(self, url: str, body: dict, headers: dict, *, label: str = "the model") -> dict:
+        req = urllib.request.Request(
+            url, data=json.dumps(body).encode(), method="POST",
+            headers={"Content-Type": "application/json", "Accept": "application/json",
+                     "User-Agent": user_agent(), **headers},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                raw = r.read().decode(errors="replace")
+                try:
+                    return json.loads(raw or "{}")
+                except json.JSONDecodeError as exc:
+                    raise ProviderError(
+                        f"Provider returned non-JSON ({r.status}): {raw[:200]}"
+                    ) from exc
+        except socket.timeout as exc:
+            raise TimeoutError_() from exc
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode()[:400]
+            if exc.code in (429, 500, 502, 503, 504):
+                hint = ""
+                if exc.code == 429:
+                    hint = ("Rate limit. Free tiers cap tokens per minute, and a long "
+                            "transcript is a big request — retry shortly, or use a "
+                            "shorter video / higher tier.")
+                raise ProviderError(
+                    f"{label} was unavailable (HTTP {exc.code}).",
+                    retryable=True, hint=hint,
+                ) from exc
+            if exc.code in (401, 403):
+                if is_edge_block(detail):
+                    raise ProviderError(
+                        "The provider's edge refused this client "
+                        f"(HTTP {exc.code}, Cloudflare) — that is the network "
+                        "signature, not your key.",
+                        hint="Set NEXCUT_USER_AGENT to your browser's user agent, "
+                             "or run from a network the API does not block.",
+                    ) from exc
+                raise ProviderError(
+                    "That API key was rejected. Check it was copied fully and is enabled.",
+                    hint=provider_env_hint(), key_dead=True,
+                ) from exc
+            if exc.code == 404:
+                raise ProviderError(
+                    f"{label} was not found at this provider: {detail}",
+                    hint="Set NEXCUT_MODELS to a model your key can use, then restart.",
+                ) from exc
+            if "model name format" in detail or "unexpected model name" in detail:
+                raise ProviderError(
+                    "That model id is not in a form Google accepts.",
+                    hint="Copy an id from `python3 tools/check_key.py --list` and set "
+                         "NEXCUT_MODELS to it, then restart.",
+                ) from exc
+            raise ProviderError(f"Provider error {exc.code}: {detail}") from exc
+        except urllib.error.URLError as exc:
+            raise ProviderError(f"Could not reach the model provider: {exc.reason}") from exc
+
+    # public ------------------------------------------------------------
+    def keys(self) -> list[str]:
+        return parse_keys(self.api_key, self.backup_key,
+                          os.environ.get("NEXCUT_API_KEYS", ""))
+
+    def complete(self, *, system: str, user: str, model: str, cascade: bool,
+                 budget: int | None = None, ctx: dict | None = None) -> tuple[str, str]:
+        # ctx carries the offline stub's raw material. Remote providers get the
+        # transcript inside the rendered prompt, so it is accepted and ignored —
+        # the pipeline passes it unconditionally (jobs.py).
+        order = [model]
+        if cascade:
+            order += [m["id"] for m in model_catalog() if m["id"] != model]
+        keys = self.keys()
+        if not keys:
+            raise ProviderError(
+                "No API key. Put NEXCUT_API_KEY=... in .env next to the repo root, "
+                "or export it before starting the server.",
+                hint="NEXCUT_API_KEY was empty when the server started — .env is only "
+                     "read at startup, so restart after editing it.")
+
+        limit = budget if budget is not None else attempt_budget()
+        attempts = 0
+        dead: list[int] = []          # 1-based key numbers that were refused
+        last: ProviderError | None = None
+
+        for index, key in enumerate(keys, start=1):
+            for candidate in order:
+                if attempts >= limit:
+                    break
+                attempts += 1
+                try:
+                    text = self._attempt(candidate, system, user, key)
+                    self.served_key = index
+                    return text, getattr(self, "served_model", candidate)
+                except TimeoutError_:
+                    raise
+                except ProviderError as exc:
+                    last = exc
+                    if exc.key_dead:
+                        dead.append(index)
+                        break                      # this key is out; next key
+                    # model-level trouble (404 / 429 / 5xx): next candidate
+            if attempts >= limit:
+                break
+
+        if last is not None and len(keys) == 1 and len(order) == 1:
+            raise last
+        tried = f"{attempts} attempt(s) across {len(keys)} key(s) and {len(order)} model(s)"
+        if dead:
+            tried += f"; {len(dead)} key(s) refused"
+        raise ProviderError(
+            f"No model answered — {tried}."
+            + (f" Last error: {last}" if last else ""),
+            hint=(last.hint if last else "") or provider_env_hint(),
+        )
+
+
+class GeminiProvider(_HttpProvider):
+    name = "gemini"
+
+    def _attempt(self, model: str, system: str, user: str, key: str) -> str:
+        try:
+            return self._attempt_once(model, system, user, key)
+        except ProviderError as exc:
+            replacement = _suggested_model(str(exc))
+            if replacement and replacement != model:
+                return self._attempt_once(replacement, system, user, key)
+            raise
+
+    def _attempt_once(self, model: str, system: str, user: str, key: str) -> str:
+        body = {
+            "systemInstruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": [{"text": user}]}],
+            "generationConfig": {
+                "temperature": 0.6,
+                "responseMimeType": "application/json",
+                "maxOutputTokens": max_tokens(8192),
+            },
+        }
+        url = GEMINI_ENDPOINT.format(model=resolve_model(model))
+        # ?key= for older keys, header for the newer AQ.… AI Studio keys: send both
+        served = resolve_model(model)
+        payload = self._post(url + f"?key={key}", body, {"x-goog-api-key": key},
+                             label=served)
+        self.served_model = served
+        try:
+            parts = payload["candidates"][0]["content"]["parts"]
+            text = "".join(p.get("text", "") for p in parts)
+        except (KeyError, IndexError, TypeError) as exc:
+            reason = (payload.get("promptFeedback") or {}).get("blockReason")
+            if reason:
+                raise ProviderError(f"Google blocked this request ({reason}).") from exc
+            raise ProviderError("Google returned no text for this request.") from exc
+        if not text.strip():
+            raise ProviderError("Google returned an empty answer.")
+        return text
+
+
+class OpenAIProvider(_HttpProvider):
+    name = "openai"
+
+    def __init__(self, api_key: str, **kw) -> None:
+        super().__init__(api_key, **kw)
+        default_base = GROQ_BASE if provider_label() == "groq" else "https://api.openai.com/v1"
+        self.base = (os.environ.get("NEXCUT_OPENAI_BASE") or default_base).rstrip("/")
+        self._served: list[str] | None = None   # cached GET /models for this key
+
+    @property
+    def name(self) -> str:  # "groq" in logs when that's what was configured
+        return provider_label() if provider_label() in ("groq", "openai") else "openai"
+
+    # models worth trying when the configured one is refused, best first
+    PREFERRED = ("openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b",
+                 "llama-3.3-70b-versatile", "llama-3.1-8b-instant")
+    NOT_CHAT = ("whisper", "tts", "guard", "embed", "orpheus", "dall", "moderation")
+
+    def _attempt(self, model: str, system: str, user: str, key: str) -> str:
+        served = resolve_model(model)
+        body = {
+            "model": served,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "temperature": 0.6,
+            "response_format": {"type": "json_object"},
+            "max_tokens": max_tokens(8192),
+        }
+        try:
+            return self._chat(body, key)
+        except ProviderError as exc:
+            text = str(exc).lower()
+            # gone, renamed, or not on this plan — ask the provider what it serves
+            if "not found at this provider" in text:
+                alternative = self._fallback_model(served, key)
+                if alternative:
+                    body["model"] = alternative
+                    return self._chat(body, key)
+                raise
+            # some OpenAI-shaped APIs renamed the output budget
+            if "max_tokens" in text and "max_completion_tokens" not in body:
+                body.pop("max_tokens", None)
+                body["max_completion_tokens"] = max_tokens(8192)
+                return self._chat(body, key)
+            # not every model accepts a forced JSON mode
+            if "response_format" in text:
+                body.pop("response_format", None)
+                return self._chat(body, key)
+            raise
+
+    def _chat(self, body: dict, key: str) -> str:
+        label = str(body.get("model") or "")
+        payload = self._post(
+            OPENAI_ENDPOINT.format(base=self.base), body,
+            {"Authorization": f"Bearer {key}"}, label=label,
+        )
+        self.served_model = label
+        try:
+            msg = payload["choices"][0]["message"]
+            text = msg.get("content") or ""
+            if not str(text).strip():
+                rc = msg.get("reasoning_content") or msg.get("reasoning") or ""
+                if "{" in str(rc) and "}" in str(rc):
+                    text = rc
+        except (KeyError, IndexError, TypeError, AttributeError) as exc:
+            raise ProviderError("The provider returned no message content.") from exc
+        if not str(text).strip():
+            raise ProviderError("The provider returned an empty answer.")
+        return text
+
+    # -- model discovery ---------------------------------------------------
+    def _served_models(self, key: str) -> list[str]:
+        """GET /models — the only honest source for what this key can use."""
+        if self._served is not None:
+            return self._served
+        request = urllib.request.Request(
+            self.base.rstrip("/") + "/models",
+            headers={"Authorization": f"Bearer {key}", "User-Agent": user_agent()},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=min(self.timeout, 20)) as r:
+                data = json.loads(r.read().decode() or "{}")
+        except Exception:  # noqa: BLE001 - discovery is a nicety, never fatal
+            self._served = []
+            return []
+        rows = data.get("data") if isinstance(data, dict) else None
+        ids = [row.get("id") for row in rows or [] if isinstance(row, dict)]
+        self._served = [i for i in ids if isinstance(i, str) and i.strip()]
+        return self._served
+
+    def _fallback_model(self, wanted: str, key: str) -> str:
+        available = self._served_models(key)
+        chat = [m for m in available
+                if not any(bad in m.lower() for bad in self.NOT_CHAT)]
+        wanted = resolve_model(wanted)
+        for candidate in list(self.PREFERRED) + [m["id"] for m in model_catalog()]:
+            if candidate in chat and resolve_model(candidate) != wanted:
+                return candidate
+        for candidate in chat:
+            if resolve_model(candidate) != wanted:
+                return candidate
+        return ""
+
+
+class CloudflareProvider(_HttpProvider):
+    name = "cloudflare"
+
+    def _attempt(self, model: str, system: str, user: str, key: str) -> str:
+        account = cloudflare_account()
+        if not account:
+            raise ProviderError(
+                "Cloudflare Workers AI needs your account id.",
+                hint="Set NEXCUT_CF_ACCOUNT=<account id> in .env (Cloudflare dashboard "
+                     "-> Workers AI -> Use REST API shows both values), then restart.",
+            )
+        url = f"{CLOUDFLARE_BASE.format(account=account)}/run/{resolve_model(model)}"
+        body = {
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "stream": False,
+            "max_tokens": max_tokens(),
+        }
+        payload = self._post(url, body, {"Authorization": f"Bearer {key}"},
+                             label=resolve_model(model))
+        if payload.get("success") is False:
+            errors = payload.get("errors") or [{}]
+            code = errors[0].get("code", "")
+            raise ProviderError(
+                f"Cloudflare refused the call ({code}): "
+                f"{errors[0].get('message', 'no detail')}",
+                hint="Check the token has the Workers AI permission and the account id "
+                     "matches the account the token belongs to.",
+            )
+        result = payload.get("result") or {}
+        text = result.get("response") or result.get("text")
+        if text is None:
+            choices = result.get("choices") or []
+            if choices:
+                text = (choices[0].get("message") or {}).get("content")
+        if not isinstance(text, str) or not text.strip():
+            raise ProviderError(
+                "Cloudflare returned no text for this model.",
+                hint="Some Workers AI models are not chat models — pick one from "
+                     "`python3 tools/check_key.py --list`.",
+            )
+        self.served_model = resolve_model(model)
+        return text
+
+
+class StubProvider:
+    """Offline demo provider — no network, no key, same output contract."""
+
+    name = "stub"
+
+    def complete(self, *, system: str, user: str, model: str, cascade: bool,
+                 ctx: dict | None = None) -> tuple[str, str]:
+        ctx = ctx or {}
+        return json.dumps(self._compose(**ctx)), "offline-demo"
+
+    def _compose(self, *, transcript: str = "", window: str = "E", num_clips: int = 5,
+                 custom_min: int | None = None, custom_max: int | None = None,
+                 niche: str = "True Crime", **_) -> dict:
+        from .prompt import split_transcript
+
+        lines = split_transcript(transcript)
+        if not lines:
+            raise ExtractError(
+                "NO TIMESTAMPS in the transcript — this run needs [00:12:30]-style stamps."
+            )
+
+        if custom_min and custom_max:
+            lo, hi = int(custom_min), int(custom_max)
+        else:
+            _, lo, hi = WINDOWS.get(window, WINDOWS["E"])
+        target = max(lo + 5, min(hi - 5, lo + 40))
+
+        clips: list[dict] = []
+        i, n = 0, 1
+        while i < len(lines) - 1 and len(clips) < num_clips:
+            start_sec, start_text = lines[i]
+            j = i + 1
+            while j < len(lines) and lines[j][0] - start_sec < target:
+                j += 1
+            if j >= len(lines):
+                j = len(lines) - 1
+            end_sec, end_text = lines[j]
+            dur = end_sec - start_sec
+            if j > i and lo <= dur <= hi:
+                scores = {"curiosity": 8.5, "stakes": 8.0, "specificity": 8.5, "speed": 8.0}
+                clips.append({
+                    "n": n,
+                    "hook_summary": start_text[:60],
+                    "start_sec": start_sec,
+                    "start_stamp": hms(start_sec),
+                    "start_sentence": start_text,
+                    "end_sec": end_sec,
+                    "end_stamp": hms(end_sec),
+                    "end_sentence": end_text,
+                    "duration_line": f"{int(dur // 60)} min {int(dur % 60)} sec",
+                    "titles": {
+                        "clickbait": start_text[:48],
+                        "search": " ".join(start_text.split()[:5]),
+                        "debate": "Was this avoidable?",
+                    },
+                    "scores": {**scores, "avg": round(sum(scores.values()) / 4, 2)},
+                    "verbal_hook": start_text[:40],
+                    "ending": end_text[:40],
+                    "why_it_works": "opens a concrete loop on the first line.",
+                    "share_trigger": "argument bait",
+                    "safety": "none",
+                    "overlays": [{"offset": "00:02", "text": start_text[:24]}],
+                    "sfx": "low pulse",
+                    "captions": "2-line bold, keyword highlighted",
+                    "upload_caption": start_text[:70],
+                    "hashtags": "#shorts #viral",
+                    "pinned_comment": "what did we miss?",
+                    "transcript_ts": "\n".join(f"{hms(s)} - {t}" for s, t in lines[i:j + 1]),
+                    "transcript": " ".join(t for _s, t in lines[i:j + 1]),
+                })
+                n += 1
+                i = j + 1
+            else:
+                i += 1
+
+        return {
+            "sweep": {
+                "window": WINDOWS.get(window, ("", 0, 0))[0] if not custom_min else f"custom {lo}-{hi}s",
+                "ranges": f"{hms(lines[0][0])}-{hms(lines[-1][0])}",
+                "longlist": len(clips) + 2,
+                "cleared": len(clips),
+            },
+            "longlist": [{"start": hms(s), "gist": t[:50]} for s, t in lines[: len(clips) + 2]],
+            "clips": clips,
+        }
+
+
+class ManualProvider:
+    """Interactive copy-paste provider for testing without an API key."""
+    name = "manual"
+
+    def complete(self, *, system: str, user: str, **_) -> tuple[str, str]:
+        import pathlib
+        import subprocess
+        import time
+
+        root = pathlib.Path(__file__).resolve().parent.parent
+        prompt_path = root / "manual_prompt.txt"
+        answer_path = root / "manual_answer.json"
+
+        full_prompt = (
+            f"{system.strip()}\n\n"
+            f"---\n\n"
+            f"{user.strip()}\n\n"
+            "IMPORTANT: Return ONLY a single valid JSON object (no markdown fences, no commentary)."
+        )
+        prompt_path.write_text(full_prompt, encoding="utf-8")
+        answer_path.write_text("", encoding="utf-8")
+
+        try:
+            subprocess.run(["clip"], input=full_prompt.encode("utf-8"), check=False)
+        except Exception:  # noqa: BLE001
+            pass
+
+        print(f"\n[manual] Prompt saved to {prompt_path} (and copied to clipboard).")
+        print(f"[manual] Paste it into Claude, then paste Claude's JSON reply into {answer_path}\n", flush=True)
+
+        deadline = time.monotonic() + 600
+        while time.monotonic() < deadline:
+            text = answer_path.read_text(encoding="utf-8", errors="replace").strip()
+            if text:
+                return text, "manual-claude"
+            time.sleep(1.0)
+        raise TimeoutError_("Timed out waiting for manual_answer.json")
+
+
+def make_provider(api_key: str = "") -> object:
+    # the browser no longer asks for a key: NEXCUT_API_KEY (or .env) wins, then the
+    # provider's own conventional variable
+    api_key = (api_key or os.environ.get("NEXCUT_API_KEY", "")).strip()
+    if not api_key:
+        keys = env_keys()
+        api_key = keys[0] if keys else ""
+    kind = provider_kind()
+    if kind == "manual":
+        return ManualProvider()
+    if kind == "gemini":
+        return GeminiProvider(api_key)
+    if kind == "cloudflare":
+        return CloudflareProvider(api_key)
+    if kind == "openai":
+        return OpenAIProvider(api_key)
+    return StubProvider()
