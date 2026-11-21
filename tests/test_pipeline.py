@@ -9,6 +9,7 @@ import json
 import unittest
 
 from nexcut.parse import (
+    FormatError,
     NoTimestampsError,
     build_result,
     ensure_timestamps,
@@ -66,6 +67,59 @@ PAYLOAD = {
 
 def result_from(clip: dict) -> OracleResult:
     return build_result(json.dumps({"clips": [clip], "longlist": [], "sweep": {}}))
+
+
+class TestMalformedShapes(unittest.TestCase):
+    """Models answer with scalars where lists belong — never a TypeError.
+
+    Regression: cloudflare's llama answered `"longlist": 12` and the whole run
+    died with "'int' object is not iterable" *after* the captions were fetched.
+    """
+
+    def answer(self, payload: dict) -> OracleResult:
+        return build_result(json.dumps(payload))
+
+    def test_longlist_as_count(self):
+        res = self.answer({"longlist": 12, "clips": [GOOD_CLIP],
+                           "sweep": {"longlist": 12, "cleared": 4}})
+        self.assertEqual(len(res.clips), 1)
+        self.assertEqual(res.longlist, [])
+        self.assertEqual(res.sweep.longlist, 12)
+
+    def test_scores_as_scalar(self):
+        res = self.answer({"clips": [dict(GOOD_CLIP, scores=9)], "longlist": []})
+        self.assertIsNone(res.clips[0].scores.curiosity)
+
+    def test_overlays_as_scalar(self):
+        res = self.answer({"clips": [dict(GOOD_CLIP, overlays=3)], "longlist": []})
+        self.assertEqual(res.clips[0].overlays, [])
+
+    def test_titles_as_string(self):
+        res = self.answer({"clips": [dict(GOOD_CLIP, titles="one title")], "longlist": []})
+        self.assertEqual(res.clips[0].titles, {})
+
+    def test_swing_sweep_as_list(self):
+        res = self.answer({"sweep": [1, 2], "clips": [GOOD_CLIP], "longlist": []})
+        self.assertEqual(len(res.clips), 1)
+
+    def test_single_clip_object_is_wrapped(self):
+        res = self.answer({"clips": GOOD_CLIP, "longlist": []})
+        self.assertEqual(len(res.clips), 1)
+        self.assertEqual(res.clips[0].start_sec, 8)
+
+    def test_clip_count_instead_of_clips_is_a_format_error(self):
+        with self.assertRaises(FormatError) as ctx:
+            self.answer({"clips": 5, "longlist": []})
+        self.assertIn("clips came back as int", str(ctx.exception))
+
+    def test_missing_clips_key_is_a_format_error(self):
+        with self.assertRaises(FormatError) as ctx:
+            self.answer({"longlist": []})
+        self.assertIn("no clips key", str(ctx.exception))
+
+    def test_list_of_strings_is_a_format_error(self):
+        with self.assertRaises(FormatError):
+            self.answer({"clips": ["clip one", "clip two"], "longlist": []})
 
 
 class TestParsing(unittest.TestCase):

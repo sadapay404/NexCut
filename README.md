@@ -91,10 +91,17 @@ the LAN URL it should be opened at, e.g. `http://192.168.1.24:8137`.
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests -v      # 226 backend/contract tests
+python3 -m unittest discover -s tests -v      # 240 backend/contract tests
 npm install && npm run test:ui                # 52 UI assertions (jsdom, no browser)
 node tools/ui_audit.js                        # static UI audit: handlers, breakpoints, a11y
 ```
+
+Model answers are treated as untrusted input: `parse.build_result` accepts a
+scalar wherever a list belongs (`"longlist": 12`, `"scores": 9`) and never raises
+a `TypeError`, and if the report is unusable the pipeline re-asks **once** with a
+repair note before giving up (`tests/test_repair.py`). `"clips": 3` therefore
+becomes "the answer was not in the clip-report format", not a crash after the
+captions have already been fetched.
 
 `tests/test_provider_contract.py` exists because the whole suite runs on the
 offline stub: it reads the `provider.complete(...)` call site out of `jobs.py`

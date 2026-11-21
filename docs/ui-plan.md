@@ -108,3 +108,20 @@ openai / gemini) did not. Every real run failed after the captions had been
 fetched — the most expensive possible point. Now guarded from both sides by
 `tests/test_provider_contract.py` and an end-to-end API test in
 `tests/test_server.py`.
+
+## Model output is untrusted input — 2026-11-20
+
+`TypeError: 'int' object is not iterable` from `parse.build_result`: cloudflare's
+llama answered `"longlist": 12` (a count) where the contract asks for an array.
+
+- `_as_list` / `_as_dict` coerce every shape the contract expects to be a
+  container (`longlist`, `clips`, `overlays`, `scores`, `titles`, `sweep`), so a
+  stray scalar is dropped instead of raising.
+- `"clips"` as a scalar or a list of strings is a `FormatError` with the offending
+  type in the message — never a `TypeError`.
+- a single clip object under `"clips"` is wrapped into a list.
+- an unusable report triggers exactly one repair call with an explicit "return
+  only the JSON object, lists not counts" note (`REPAIR_SUFFIX`), and the warning
+  is recorded on the job. A second failure surfaces the format error.
+- `tests/test_repair.py` drives a private `JobManager` (the HTTP tests share a
+  module-level one, which made the first version of that test flaky).

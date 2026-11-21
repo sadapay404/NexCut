@@ -296,5 +296,22 @@ class ServerCase(unittest.TestCase):
         self.assertEqual(printed.call_count, 1, "the traceback must reach the terminal")
 
 
+    def test_two_bad_answers_surface_a_format_error(self):
+        from nexcut import server as server_module
+        from nexcut.providers import CloudflareProvider
+
+        junk = json.dumps({"sweep": {}, "longlist": 3, "clips": 3})
+        provider = CloudflareProvider("test-token")
+
+        with mock.patch.object(provider, "_attempt", return_value=junk), \
+                mock.patch.object(server_module.MANAGER, "_provider_factory",
+                                  lambda api_key: provider):
+            job_id, job = self.run_job()
+
+        self.assertEqual(job["status"], "error")
+        self.assertIn("clip-report format", job["error"])
+        self.assertNotIn("TypeError", job["error"])
+
+
 if __name__ == "__main__":
     unittest.main()

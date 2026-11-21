@@ -128,10 +128,28 @@ def _str(v) -> str:
     return "" if v is None else str(v).strip()
 
 
+def _as_list(v) -> list:
+    """A list, or nothing. Models answer "longlist": 12 or "overlays": 3."""
+    if isinstance(v, list):
+        return v
+    if isinstance(v, tuple):
+        return list(v)
+    return []
+
+
+def _preview(v, limit: int = 40) -> str:
+    text = v if isinstance(v, str) else repr(v)
+    text = " ".join(str(text).split())
+    return text[:limit] + ("…" if len(text) > limit else "")
+
+
+def _as_dict(v) -> dict:
+    """A dict, or nothing. Models answer "scores": 9 or "titles": "..."."""
+    return v if isinstance(v, dict) else {}
+
+
 def _clip_from_dict(d: dict, idx: int) -> Clip:
-    raw_scores = d.get("scores") or {}
-    if isinstance(raw_scores, str):  # tolerate "8/10" style answers
-        raw_scores = {}
+    raw_scores = _as_dict(d.get("scores"))   # tolerates "8/10" and bare numbers
     scores = Scores(
         curiosity=_num(raw_scores.get("curiosity")),
         stakes=_num(raw_scores.get("stakes")),
@@ -146,13 +164,11 @@ def _clip_from_dict(d: dict, idx: int) -> Clip:
     if end is None:
         end = parse_stamp(_str(d.get("end_stamp"))) or 0.0
 
-    titles = d.get("titles") or {}
-    if not isinstance(titles, dict):
-        titles = {}
+    titles = _as_dict(d.get("titles"))
 
     overlays = [
         Overlay(offset=_str(o.get("offset")), text=_str(o.get("text")))
-        for o in (d.get("overlays") or [])
+        for o in _as_list(d.get("overlays"))
         if isinstance(o, dict)
     ]
 
@@ -203,15 +219,25 @@ def build_result(
 
     longlist = [
         {"start": _str(x.get("start")), "gist": _str(x.get("gist"))}
-        for x in (data.get("longlist") or [])
+        for x in _as_list(data.get("longlist"))
         if isinstance(x, dict)
     ]
 
+    if "clips" not in data:
+        raise FormatError("the answer has no clips key")
+    raw_clips = data.get("clips")
+    if isinstance(raw_clips, dict):          # a single clip object, not a list
+        raw_clips = [raw_clips]
     clips = [
         _clip_from_dict(c, i)
-        for i, c in enumerate(data.get("clips") or [])
+        for i, c in enumerate(_as_list(raw_clips))
         if isinstance(c, dict)
     ]
+    if not clips and raw_clips not in (None, [], {}):
+        kind = type(raw_clips).__name__
+        raise FormatError(
+            f"clips came back as {kind} ({_preview(raw_clips)}), not a list of clip objects"
+        )
 
     return OracleResult(
         sweep=sweep,

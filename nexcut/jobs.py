@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from .ingest import IngestError, fetch_transcript
-from .parse import ExtractError, build_result, ensure_timestamps
+from .parse import ExtractError, FormatError, build_result, ensure_timestamps
 from .prompt import format_ranges, plan_sweep
 from .providers import default_model
 from .prompts import compose
@@ -27,6 +27,14 @@ from .validate import apply_rules
 
 MAX_JOBS = 60
 JOB_TTL_SEC = 2 * 60 * 60
+
+
+REPAIR_SUFFIX = (
+    "\n\n---\nYour previous reply could not be used: {detail}\n"
+    "Return ONLY the JSON object specified above — no prose, no markdown fence, no "
+    "counts in place of lists. \"clips\" must be an array of clip objects and "
+    "\"longlist\" an array of {{start, gist}} objects."
+)
 
 
 @dataclass
@@ -180,11 +188,33 @@ class JobManager:
                 },
             )
 
-            # 5. parse
+            # 5. parse — one repair attempt, because a model that answers in the
+            # wrong shape will answer in the wrong shape again on a manual retry
             self._step(job, 72, "Parsing the clip report…")
-            result = build_result(
-                answer, video_id=video_id, video_title=title, window_label=label
-            )
+            try:
+                result = build_result(
+                    answer, video_id=video_id, video_title=title, window_label=label
+                )
+            except FormatError as first:
+                job.warnings.append(f"First answer was malformed ({first}); asked again.")
+                self._step(job, 76, "Answer was malformed — asking once more…")
+                answer, model_used = provider.complete(
+                    system=system,
+                    user=user + REPAIR_SUFFIX.format(detail=str(first)),
+                    model=p.get("model") or default_model(),
+                    cascade=bool(p.get("cascade", True)),
+                    ctx={
+                        "transcript": transcript,
+                        "window": window,
+                        "num_clips": requested,
+                        "custom_min": custom_min,
+                        "custom_max": custom_max,
+                        "niche": p.get("niche") or "auto",
+                    },
+                )
+                result = build_result(
+                    answer, video_id=video_id, video_title=title, window_label=label
+                )
             result.oracle_report = answer
 
             # 6. score + gate
