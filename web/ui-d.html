@@ -36,6 +36,11 @@
     </nav>
 
     <div class="panel-spacer" aria-hidden="true">
+      <div class="panel-card">
+        <div class="panel-card-row"><span class="panel-dot"></span><span>1080p Output</span></div>
+        <div class="panel-card-row"><span class="panel-dot"></span><span>Transcript-first AI</span></div>
+        <div class="panel-card-row"><span class="panel-dot"></span><span>8.0 Quality Gate</span></div>
+      </div>
       <span class="panel-mark">
         <img src="/static/logo-dsn.jpg" alt="">
       </span>
@@ -46,12 +51,23 @@
     <div class="work-head">
       <span class="stage" data-role="stage-label">New cut</span>
       <div class="tools">
-        <a class="icon-btn" href="https://github.com/sadapay404/NexCut" target="_blank" rel="noreferrer" aria-label="Repository" title="Repository"><span data-icon="github"></span></a>
+        <button class="icon-btn" type="button" id="d-history-btn" data-role="history-btn" data-action="history" aria-label="History" title="History">
+          <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
+        </button>
         <button class="icon-btn" type="button" data-role="theme-toggle" data-action="theme" aria-label="Toggle theme" title="Toggle theme"></button>
       </div>
     </div>
 
     <div class="work-body">
+
+      <section class="pane history-pane" id="d-history-panel" data-role="history-panel" hidden>
+        <div class="history-head">
+          <h2 class="h2">Cut History</h2>
+          <button class="ghost" type="button" data-role="history-close" data-action="history-close">Close</button>
+        </div>
+        <p class="sub">Past extractions saved in this browser. Click any session to view its clips.</p>
+        <div class="history-list" id="d-history-list" data-role="history-list"></div>
+      </section>
 
       <div data-role="pane-cutter">
 
@@ -131,9 +147,15 @@
 
         <!-- 3 · working -->
         <section class="pane" data-role="pane-working" hidden>
-          <div class="work-num"><b data-role="pct-text">0%</b></div>
-          <h2 class="h2 stage-line" data-role="stage-text">Queued</h2>
-          <div class="progress" aria-hidden="true"><i data-role="progress-fill"></i></div>
+          <div class="work-card">
+            <div class="work-top">
+              <span class="work-pulse" aria-hidden="true"></span>
+              <span class="work-badge">Extracting</span>
+            </div>
+            <div class="work-num"><b data-role="pct-text">0%</b></div>
+            <h2 class="h2 stage-line" data-role="stage-text">Queued</h2>
+            <div class="progress" aria-hidden="true"><i data-role="progress-fill"></i></div>
+          </div>
           <div class="own" id="d-manual-box" hidden>
             <p class="hint">Manual mode: prompt copied to clipboard (and saved to <code>manual_prompt.txt</code>). Paste Claude's JSON reply below:</p>
             <textarea id="d-manual-json" data-role="manual-json" rows="6" placeholder='{"clips": [...]}'></textarea>

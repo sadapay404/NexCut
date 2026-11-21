@@ -301,6 +301,21 @@
       lastZip = c.zipUrl || "";
       renderList();
       syncZipLink();
+
+      if (c.clips && c.clips.length) {
+        try {
+          var hist = JSON.parse(localStorage.getItem("saa_history_d") || "[]");
+          var chEl = R("detail-channel");
+          var channel = chEl ? (chEl.textContent || "").trim() : "";
+          var now = new Date();
+          var cutAt = now.toLocaleDateString() + " " + now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          var entry = { title: c.title || "Untitled", channel: channel || "YouTube", cutAt: cutAt, clips: c.clips };
+          if (!hist.length || hist[0].title !== entry.title || hist[0].clips.length !== entry.clips.length) {
+            hist.unshift(entry);
+            localStorage.setItem("saa_history_d", JSON.stringify(hist.slice(0, 20)));
+          }
+        } catch (_) {}
+      }
     },
 
     focusLink: function () { N.focusIfDesktop(R("link-input")); },
@@ -339,6 +354,50 @@
       }).finally(function () {
         manualBtn.disabled = false;
       });
+    },
+    "history": function () {
+      var hp = R("history-panel");
+      var cutter = R("pane-cutter");
+      var list = R("history-list");
+      var open = hp.hidden;
+      hp.hidden = !open;
+      cutter.hidden = open;
+      if (open && list) {
+        var items = [];
+        try { items = JSON.parse(localStorage.getItem("saa_history_d") || "[]"); } catch (_) {}
+        list.innerHTML = "";
+        if (!items.length) {
+          list.appendChild(N.el("p", "sub", "No cut history yet. Extract a video to see it here."));
+          return;
+        }
+        items.forEach(function (it) {
+          var btn = N.el("button", "history-item");
+          btn.type = "button";
+          btn.appendChild(N.el("div", "history-title", it.title || "Untitled video"));
+          btn.appendChild(N.el("div", "history-meta", (it.channel || "Unknown channel") + " · Cut " + (it.cutAt || "") + " · " + (it.clips ? it.clips.length : 0) + " clips"));
+          btn.addEventListener("click", function () {
+            hp.hidden = true;
+            cutter.hidden = false;
+            view.showPane("results");
+            view.setResults({
+              title: it.title || "History session",
+              meta: (it.channel || "") + " · Cut " + (it.cutAt || ""),
+              found: it.clips ? it.clips.length : 0,
+              kept: it.clips ? it.clips.length : 0,
+              rejected: 0,
+              asked: "AUTO",
+              clips: it.clips || [],
+              files: [],
+              zipUrl: ""
+            });
+          });
+          list.appendChild(btn);
+        });
+      }
+    },
+    "history-close": function () {
+      R("history-panel").hidden = true;
+      R("pane-cutter").hidden = false;
     },
     "retry": function () { app.retry(); },
     "new-link": function () { app.reset(); },
@@ -399,6 +458,19 @@
     wireInputs();
     app = N.createApp(view);
     app.boot();
+
+    var badge = document.querySelector(".badge");
+    if (badge) {
+      badge.addEventListener("mousemove", function (e) {
+        var r = badge.getBoundingClientRect();
+        var x = (e.clientX - r.left) / r.width - 0.5;
+        var y = (e.clientY - r.top) / r.height - 0.5;
+        badge.style.transform = "perspective(400px) rotateX(" + (-y * 22).toFixed(1) + "deg) rotateY(" + (x * 22).toFixed(1) + "deg) scale(1.04)";
+      });
+      badge.addEventListener("mouseleave", function () {
+        badge.style.transform = "";
+      });
+    }
 
     var manualBox = document.getElementById("d-manual-box");
     var manualBtn = document.getElementById("d-manual-submit");

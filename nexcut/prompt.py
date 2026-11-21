@@ -176,13 +176,17 @@ them up as vertical-video clips for a {audience} audience, delivered in
    move `start_sentence` forward to it.
 4. STRANGER TEST. Someone scrolling with no context must understand the stakes
    inside the first line. No "as I said earlier", no unresolved pronouns.
-5. ONE IDEA. One moment, one turn, one payoff. Never merge two separate
-   stories to reach the duration window.
-6. LENGTH HONESTY. If the transcript cannot fill the window without padding,
+5. ONE IDEA & FUN FACTOR. One moment, one turn, one payoff. Never merge two
+   separate stories to reach the duration window. Pick moments with genuine
+   energy — surprise, humor, absurdity, conflict, or a sharp reveal — not
+   flat explanations.
+6. STRONG ENDING. End on a punchline, a twist, a visual/verbal mic-drop, or a
+   sharp open loop — never trail off on filler or "so yeah".
+7. LENGTH HONESTY. If the transcript cannot fill the window without padding,
    return fewer clips. Fewer good clips beats a padded one.
-7. NO DUPLICATES. Clips must not overlap in time, and must not reuse anything
+8. NO DUPLICATES. Clips must not overlap in time, and must not reuse anything
    listed under `already_used`.
-8. SAFETY. No accusations against named private individuals, no addresses, no
+9. SAFETY. No accusations against named private individuals, no addresses, no
    phone numbers, no medical or legal advice. If a clip needs a caution, say so
    in `safety`; otherwise write "none".
 
