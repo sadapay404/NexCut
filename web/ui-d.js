@@ -320,6 +320,26 @@
     "upload": function () { R("file-input").click(); },
     "len": function (el) { setLen(el.getAttribute("data-len")); },
     "run": function () { app.run(); },
+    "manual-submit": function () {
+      var manualBtn = R("manual-submit");
+      var manualTxt = R("manual-json");
+      var val = (manualTxt.value || "").trim();
+      if (!val) { view.toast("Paste Claude's JSON first."); return; }
+      manualBtn.disabled = true;
+      fetch("/api/manual-answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: val })
+      }).then(function (r) {
+        if (!r.ok) throw new Error("Failed");
+        manualTxt.value = "";
+        view.toast("Submitted — processing clips…");
+      }).catch(function () {
+        view.toast("Failed to submit JSON.");
+      }).finally(function () {
+        manualBtn.disabled = false;
+      });
+    },
     "retry": function () { app.retry(); },
     "new-link": function () { app.reset(); },
     "copy-details": function () { app.copy(lastErrorText); },
