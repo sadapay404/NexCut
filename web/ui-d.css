@@ -713,6 +713,7 @@ h1 {
 }
 .score {
   grid-area: score;
+  justify-self: end;
   padding: 4px 7px;
   border: 1px solid var(--line-2);
   border-radius: 6px;
@@ -749,10 +750,12 @@ h1 {
 /* packaging, opened under a clip */
 .pack {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 26px;
+  grid-template-columns: minmax(0, 1fr);
   padding: 2px 0 22px;
   animation: rise 0.2s ease both;
+}
+@media (min-width: 700px) {
+  .pack { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 26px; }
 }
 
 .pack-time {
@@ -944,16 +947,17 @@ h1 {
   .wrap { max-width: 700px; }
 }
 
-@media (max-width: 900px) {
-  .split { grid-template-columns: 1fr; }
+/* two columns only once the page is wide enough for the segment control */
+@media (min-width: 1025px) {
+  .split { grid-template-columns: 1.08fr 0.92fr; }
+  .split .cell:first-child { padding-right: 30px; }
   .cell.plan {
-    margin-top: 34px;
-    padding-top: 28px;
-    padding-left: 0;
-    border-top: 1px solid var(--line);
-    border-left: 0;
+    margin-top: 0;
+    padding-top: 0;
+    padding-left: 34px;
+    border-top: 0;
+    border-left: 1px solid var(--line);
   }
-  .pack { grid-template-columns: 1fr; column-gap: 0; }
 }
 
 /* ── small tablet / large phone ─────────────────────────────────────── */
