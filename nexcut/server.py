@@ -206,9 +206,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store" if ctype.startswith("application/json") else "no-cache")
         for k, v in (extra or {}).items():
             self.send_header(k, v)
-        self.end_headers()
-        if self.command != "HEAD":
-            self.wfile.write(body)
+        try:
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass
 
     def _json(self, status: int, payload) -> None:
         self._send(status, json.dumps(payload, ensure_ascii=False).encode(), "application/json; charset=utf-8")
