@@ -91,10 +91,18 @@ the LAN URL it should be opened at, e.g. `http://192.168.1.24:8137`.
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests -v      # 244 backend/contract tests
+python3 -m unittest discover -s tests -v      # 253 backend/contract tests
 npm install && npm run test:ui                # 54 UI assertions (jsdom, no browser)
 node tools/ui_audit.js                        # static UI audit: handlers, breakpoints, a11y
 ```
+
+**A refused model id fixes itself.** Groq moved `llama-3.3-70b-versatile` (and
+`llama-3.1-8b-instant`) to Enterprise-only plans while keeping the id, so an
+unchanged `.env` started answering `code: model_not_found`. On that error NexCut
+asks the provider `GET /models` with your key, picks the best chat model it
+actually serves (`openai/gpt-oss-120b` first), and retries — once, then it
+reports the original error. The same path handles APIs that renamed
+`max_tokens` to `max_completion_tokens` or reject `response_format`.
 
 **The output budget is always stated explicitly.** Workers AI defaults
 `max_tokens` to **256** — far too small for a clip report — so a run used to come

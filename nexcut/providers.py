@@ -51,10 +51,16 @@ CLOUDFLARE_MODELS = [
     "@cf/openai/gpt-oss-120b",
 ]
 
+# Groq moves models between plans without notice: llama-3.3-70b-versatile and
+# llama-3.1-8b-instant are Enterprise-only now; gpt-oss is what a normal key can
+# use. When a model is refused the provider is asked what it does serve
+# (OpenAIProvider._fallback_model) instead of making the user edit .env.
 GROQ_MODELS = [
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "qwen/qwen3.8-27b",
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
-    "openai/gpt-oss-120b",
 ]
 
 TIMEOUT_MSG = "Gemini is slow right now — the request timed out before it answered."
@@ -402,33 +408,98 @@ class OpenAIProvider(_HttpProvider):
         super().__init__(api_key, **kw)
         default_base = GROQ_BASE if provider_label() == "groq" else "https://api.openai.com/v1"
         self.base = (os.environ.get("NEXCUT_OPENAI_BASE") or default_base).rstrip("/")
+        self._served: list[str] | None = None   # cached GET /models for this key
 
     @property
     def name(self) -> str:  # "groq" in logs when that's what was configured
         return provider_label() if provider_label() in ("groq", "openai") else "openai"
 
+    # models worth trying when the configured one is refused, best first
+    PREFERRED = ("openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b",
+                 "llama-3.3-70b-versatile", "llama-3.1-8b-instant")
+    NOT_CHAT = ("whisper", "tts", "guard", "embed", "orpheus", "dall", "moderation")
+
     def _attempt(self, model: str, system: str, user: str, key: str) -> str:
+        served = resolve_model(model)
         body = {
-            "model": resolve_model(model),
+            "model": served,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
             "temperature": 0.6,
             "response_format": {"type": "json_object"},
-            "max_tokens": max_tokens(),
+            "max_tokens": max_tokens(8192),
         }
+        try:
+            return self._chat(body, key)
+        except ProviderError as exc:
+            text = str(exc).lower()
+            # gone, renamed, or not on this plan — ask the provider what it serves
+            if "not found at this provider" in text:
+                alternative = self._fallback_model(served, key)
+                if alternative:
+                    body["model"] = alternative
+                    return self._chat(body, key)
+                raise
+            # some OpenAI-shaped APIs renamed the output budget
+            if "max_tokens" in text and "max_completion_tokens" not in body:
+                body.pop("max_tokens", None)
+                body["max_completion_tokens"] = max_tokens(8192)
+                return self._chat(body, key)
+            # not every model accepts a forced JSON mode
+            if "response_format" in text:
+                body.pop("response_format", None)
+                return self._chat(body, key)
+            raise
+
+    def _chat(self, body: dict, key: str) -> str:
+        label = str(body.get("model") or "")
         payload = self._post(
             OPENAI_ENDPOINT.format(base=self.base), body,
-            {"Authorization": f"Bearer {key}"}, label=model,
+            {"Authorization": f"Bearer {key}"}, label=label,
         )
+        self.served_model = label
         try:
             text = payload["choices"][0]["message"]["content"] or ""
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderError("The provider returned no message content.") from exc
-        if not text.strip():
+        if not str(text).strip():
             raise ProviderError("The provider returned an empty answer.")
         return text
+
+    # -- model discovery ---------------------------------------------------
+    def _served_models(self, key: str) -> list[str]:
+        """GET /models — the only honest source for what this key can use."""
+        if self._served is not None:
+            return self._served
+        request = urllib.request.Request(
+            self.base.rstrip("/") + "/models",
+            headers={"Authorization": f"Bearer {key}", "User-Agent": user_agent()},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=min(self.timeout, 20)) as r:
+                data = json.loads(r.read().decode() or "{}")
+        except Exception:  # noqa: BLE001 - discovery is a nicety, never fatal
+            self._served = []
+            return []
+        rows = data.get("data") if isinstance(data, dict) else None
+        ids = [row.get("id") for row in rows or [] if isinstance(row, dict)]
+        self._served = [i for i in ids if isinstance(i, str) and i.strip()]
+        return self._served
+
+    def _fallback_model(self, wanted: str, key: str) -> str:
+        available = self._served_models(key)
+        chat = [m for m in available
+                if not any(bad in m.lower() for bad in self.NOT_CHAT)]
+        wanted = resolve_model(wanted)
+        for candidate in list(self.PREFERRED) + [m["id"] for m in model_catalog()]:
+            if candidate in chat and resolve_model(candidate) != wanted:
+                return candidate
+        for candidate in chat:
+            if resolve_model(candidate) != wanted:
+                return candidate
+        return ""
 
 
 class CloudflareProvider(_HttpProvider):
