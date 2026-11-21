@@ -312,6 +312,12 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:  # noqa: BLE001
             return self._error(500, f"Server error: {exc}")
 
+    def handle(self) -> None:
+        try:
+            super().handle()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass
+
     def do_HEAD(self) -> None:  # noqa: N802
         self.do_GET()
 
