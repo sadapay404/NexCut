@@ -104,7 +104,8 @@ class ServerCase(unittest.TestCase):
 
     def test_direction_pages_load_the_engine(self):
         # each direction page loads the shared engine and its own script
-        for page, script in [("/ui-a.html", "ui-a.js"), ("/ui-b.html", "ui-b.js"), ("/ui-c.html", "ui-c.js")]:
+        for page, script in [("/ui-a.html", "ui-a.js"), ("/ui-b.html", "ui-b.js"),
+                              ("/ui-c.html", "ui-c.js"), ("/ui-d.html", "ui-d.js")]:
             with urllib.request.urlopen(self.base + page, timeout=10) as r:
                 html = r.read().decode()
             self.assertIn("/static/core.js", html, page)

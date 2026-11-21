@@ -92,7 +92,7 @@ the LAN URL it should be opened at, e.g. `http://192.168.1.24:8137`.
 
 ```bash
 python3 -m unittest discover -s tests -v      # 254 backend/contract tests
-npm install && npm run test:ui                # 54 UI assertions × 3 directions (jsdom, no browser)
+npm install && npm run test:ui                # 54 UI assertions × 4 directions (jsdom, no browser)
 node tools/ui_audit.js                        # static UI audit: handlers, breakpoints, a11y
 ```
 
@@ -125,13 +125,14 @@ with `ast` and fails if any provider class cannot accept those keywords. That is
 the bug that made every real run die with *"complete() got an unexpected keyword
 argument 'ctx'"* while 219 stub-based tests stayed green.
 
-The UI has three directions (see `docs/ui-directions.md`) that share one engine (`web/core.js`): **UI A**
-(editorial), **UI B** (console, the default) and **UI C** (cards). Open
-`http://localhost:8137`, or `http://localhost:8137/?ui=1`, `?ui=2`, `?ui=3` to pick
-one. See `docs/ui-directions.md` for what each one optimises for.
+The UI has four directions (see `docs/ui-directions.md`) that share one engine (`web/core.js`): **UI A**
+(editorial), **UI B** (console, the default), **UI C** (cards) and **UI D**
+(ledger, the minimal one). Open `http://localhost:8137`, or
+`http://localhost:8137/?ui=1`, `?ui=2`, `?ui=3`, `?ui=4` to pick one.
+See `docs/ui-directions.md` for what each one optimises for.
 
 The UI harness boots each direction in jsdom against a stubbed API and walks the
-same flow for all three, failing on any exception, `console.error`, or missing
+same flow for all four, failing on any exception, `console.error`, or missing
 requirement (`node tools/ui_smoke.js`). The static audit checks what jsdom cannot:
 every control has a handler, no CDN, the plain-http copy fallback, breakpoints,
 focus rings and reduced motion (`node tools/ui_audit.js`). The data-role contract
