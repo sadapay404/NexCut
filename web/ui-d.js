@@ -305,7 +305,7 @@
       if (c.clips && c.clips.length) {
         try {
           var hist = JSON.parse(localStorage.getItem("saa_history_d") || "[]");
-          var chEl = R("detail-author");
+          var chEl = R("detail-meta");
           var channel = chEl ? (chEl.textContent || "").trim() : "";
           var now = new Date();
           var cutAt = now.toLocaleDateString() + " " + now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
