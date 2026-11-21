@@ -91,8 +91,8 @@ the LAN URL it should be opened at, e.g. `http://192.168.1.24:8137`.
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests -v      # 253 backend/contract tests
-npm install && npm run test:ui                # 54 UI assertions (jsdom, no browser)
+python3 -m unittest discover -s tests -v      # 254 backend/contract tests
+npm install && npm run test:ui                # 54 UI assertions × 3 directions (jsdom, no browser)
 node tools/ui_audit.js                        # static UI audit: handlers, breakpoints, a11y
 ```
 
