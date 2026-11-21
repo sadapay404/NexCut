@@ -86,6 +86,22 @@ class RequestShape(unittest.TestCase):
         self.assertEqual(seen["body"]["messages"][1], {"role": "user", "content": "USER"})
         self.assertFalse(seen["body"]["stream"])
 
+    def test_max_tokens_is_sent_explicitly(self):
+        """Workers AI defaults max_tokens to 256 — a report never fits, and the
+        answer comes back cut off in the middle of the JSON."""
+        _, seen = self.attempt({"result": {"response": "ok"}})
+        self.assertEqual(seen["body"]["max_tokens"], 4096)
+
+    def test_max_tokens_is_configurable(self):
+        with mock.patch.dict(os.environ, {"NEXCUT_MAX_TOKENS": "6000"}, clear=False):
+            _, seen = self.attempt({"result": {"response": "ok"}})
+        self.assertEqual(seen["body"]["max_tokens"], 6000)
+
+    def test_bad_max_tokens_falls_back_to_the_default(self):
+        with mock.patch.dict(os.environ, {"NEXCUT_MAX_TOKENS": "lots"}, clear=False):
+            _, seen = self.attempt({"result": {"response": "ok"}})
+        self.assertEqual(seen["body"]["max_tokens"], 4096)
+
     def test_choices_result_is_accepted_too(self):
         text, _ = self.attempt({"result": {"choices": [{"message": {"content": "HI"}}]}})
         self.assertEqual(text, "HI")

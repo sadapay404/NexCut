@@ -91,10 +91,18 @@ the LAN URL it should be opened at, e.g. `http://192.168.1.24:8137`.
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests -v      # 240 backend/contract tests
-npm install && npm run test:ui                # 52 UI assertions (jsdom, no browser)
+python3 -m unittest discover -s tests -v      # 244 backend/contract tests
+npm install && npm run test:ui                # 54 UI assertions (jsdom, no browser)
 node tools/ui_audit.js                        # static UI audit: handlers, breakpoints, a11y
 ```
+
+**The output budget is always stated explicitly.** Workers AI defaults
+`max_tokens` to **256** — far too small for a clip report — so a run used to come
+back cut off mid-JSON and look like "the answer has no clips key". NexCut now
+sends `max_tokens: 4096` (Cloudflare), `max_tokens` (OpenAI-compatible) and
+`maxOutputTokens` (Gemini). Override with `NEXCUT_MAX_TOKENS=6000` in `.env`.
+A cut-off answer is now named as such, and the raw reply is printed in the
+terminal and shown under "What the model returned" on the failure pane.
 
 Model answers are treated as untrusted input: `parse.build_result` accepts a
 scalar wherever a list belongs (`"longlist": 12`, `"scores": 9`) and never raises

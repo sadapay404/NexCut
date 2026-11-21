@@ -117,6 +117,15 @@ class TestMalformedShapes(unittest.TestCase):
             self.answer({"longlist": []})
         self.assertIn("no clips key", str(ctx.exception))
 
+    def test_cut_off_answer_says_so(self):
+        cut = '{"sweep": {"window": "40-50"}, "longlist": [{"start": "00:00:08", "gist": "x"}'
+        with self.assertRaises(FormatError) as ctx:
+            build_result(cut)
+        message = str(ctx.exception)
+        self.assertIn("cut off", message)
+        self.assertNotIn("no clips key", message)
+        self.assertIn("NEXCUT_MAX_TOKENS", ctx.exception.hint)
+
     def test_list_of_strings_is_a_format_error(self):
         with self.assertRaises(FormatError):
             self.answer({"clips": ["clip one", "clip two"], "longlist": []})

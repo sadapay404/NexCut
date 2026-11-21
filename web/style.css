@@ -363,6 +363,14 @@ textarea {
 .fail-head .ico { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: rgba(224, 145, 137, .14); color: var(--red); }
 .fail-head h2 { font-size: 14.5px; font-weight: 600; }
 .fail-msg { font-size: 12.5px; color: var(--text-2); overflow-wrap: anywhere; }
+.fail-raw summary { cursor: pointer; font-size: 11.5px; color: var(--text-3); padding: 4px 0; }
+.fail-raw summary:hover { color: var(--text-2); }
+.fail-raw pre {
+  margin: 6px 0 0; padding: 9px 11px; max-height: 200px; overflow: auto;
+  border: 1px solid var(--line); border-radius: 8px; background: rgba(0, 0, 0, .25);
+  font: 11px/1.5 var(--mono); color: var(--text-3);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
 .fail-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .fail-hint { border-left: 2px solid var(--gold); background: rgba(255, 255, 255, .03); border-radius: 0 6px 6px 0; padding: 8px 10px; font-size: 11.5px; color: var(--text-2); }
 

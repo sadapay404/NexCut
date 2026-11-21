@@ -149,6 +149,20 @@ def attempt_budget() -> int:
         return 12
 
 
+def max_tokens(default: int = 4096) -> int:
+    """Output budget per call.
+
+    Workers AI defaults max_tokens to 256 — a clip report never fits in that, so
+    the model gets cut off mid-object and the answer looks malformed. Every
+    provider now states the budget explicitly.
+    """
+    try:
+        value = int(os.environ.get("NEXCUT_MAX_TOKENS", "").strip())
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 def request_timeout() -> int:
     try:
         return max(10, int(os.environ.get("NEXCUT_TIMEOUT", "180")))
@@ -359,7 +373,7 @@ class GeminiProvider(_HttpProvider):
             "generationConfig": {
                 "temperature": 0.6,
                 "responseMimeType": "application/json",
-                "maxOutputTokens": 8192,
+                "maxOutputTokens": max_tokens(8192),
             },
         }
         url = GEMINI_ENDPOINT.format(model=resolve_model(model))
@@ -402,6 +416,7 @@ class OpenAIProvider(_HttpProvider):
             ],
             "temperature": 0.6,
             "response_format": {"type": "json_object"},
+            "max_tokens": max_tokens(),
         }
         payload = self._post(
             OPENAI_ENDPOINT.format(base=self.base), body,
@@ -434,6 +449,7 @@ class CloudflareProvider(_HttpProvider):
                 {"role": "user", "content": user},
             ],
             "stream": False,
+            "max_tokens": max_tokens(),
         }
         payload = self._post(url, body, {"Authorization": f"Bearer {key}"},
                              label=resolve_model(model))

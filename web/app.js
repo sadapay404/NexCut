@@ -492,7 +492,8 @@ function pollJob(jobId) {
     } else if (job.status === "error") {
       clearInterval(S.timers.poll);
       $("runBtn").disabled = false;
-      renderError(titleFor(job.error), job.error || "Unknown error", job.error_hint);
+      renderError(titleFor(job.error), job.error || "Unknown error", job.error_hint,
+                  job.raw_answer);
     }
   }, 1000);
 }
@@ -503,6 +504,7 @@ function titleFor(message) {
   if (m.includes("clip-report")) return "Answer was not valid JSON";
   if (m.includes("slow right now")) return "Model timed out";
   if (/api key/i.test(m)) return "API key rejected";
+  if (/cut off|output tokens|output room/i.test(m)) return "The answer was cut off";
   if (/caption/i.test(m)) return "Captions unavailable";
   if (/^(TypeError|KeyError|AttributeError|NameError|IndexError|ValueError|OSError):/.test(m)) {
     return "NexCut hit a bug";
@@ -726,7 +728,7 @@ function reset() {
   $("ytUrl").focus();
 }
 
-function renderError(title, message, detail) {
+function renderError(title, message, detail, raw) {
   showPane("errorPane");
   const pane = $("errorPane");
   pane.textContent = "";
@@ -751,8 +753,16 @@ function renderError(title, message, detail) {
   back.onclick = reset;
   row.appendChild(back);
   const copyBtn = el("button", "chip-btn", "Copy details");
-  copyBtn.onclick = () => copy([title, message, detail].filter(Boolean).join("\n"));
+  copyBtn.onclick = () => copy([title, message, detail, raw].filter(Boolean).join("\n\n"));
   row.appendChild(copyBtn);
+  if (raw && raw.trim()) {
+    // the model's own words: the only way to tell a bad answer from a bad request
+    const det = el("details", "fail-raw");
+    det.appendChild(el("summary", null, "What the model returned"));
+    const pre = el("pre", null, raw.length > 4000 ? raw.slice(0, 4000) + "…" : raw);
+    det.appendChild(pre);
+    box.appendChild(det);
+  }
   box.appendChild(row);
   pane.appendChild(box);
   $("runBtn").disabled = false;

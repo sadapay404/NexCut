@@ -90,6 +90,8 @@ class RepairPath(unittest.TestCase):
         self.assertIn("clip-report format", job.error)
         self.assertNotIn("TypeError", job.error)
         self.assertEqual(calls, ["plain", "repair"])
+        # the model's own words must survive for diagnosis
+        self.assertIn("clips", job.raw_answer)
 
     def test_repair_is_not_attempted_twice(self):
         junk = "definitely not json"

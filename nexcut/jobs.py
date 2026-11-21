@@ -33,7 +33,8 @@ REPAIR_SUFFIX = (
     "\n\n---\nYour previous reply could not be used: {detail}\n"
     "Return ONLY the JSON object specified above — no prose, no markdown fence, no "
     "counts in place of lists. \"clips\" must be an array of clip objects and "
-    "\"longlist\" an array of {{start, gist}} objects."
+    "\"longlist\" an array of {{start, gist}} objects. Keep every string short — "
+    "if you run out of room, drop optional fields before cutting the JSON."
 )
 
 
@@ -50,6 +51,7 @@ class Job:
     created: float = field(default_factory=time.time)
     params: dict[str, Any] = field(default_factory=dict)
     elapsed_s: float = 0.0
+    raw_answer: str = ""             # what the model said when parsing failed
 
     def status_payload(self) -> dict[str, Any]:
         return {
@@ -61,6 +63,7 @@ class Job:
             "error_hint": self.error_hint,
             "warnings": self.warnings,
             "elapsed_s": round(self.elapsed_s, 2),
+            "raw_answer": self.raw_answer,
         }
 
 
@@ -246,6 +249,12 @@ class JobManager:
             job.error = str(exc)
             job.error_hint = getattr(exc, "hint", "") or ""
             job.stage = "Failed"
+            said = locals().get("answer") or ""      # bound only after the model call
+            if isinstance(exc, FormatError) and said:
+                # keep what the model actually said: the answer is the diagnosis
+                job.raw_answer = said[:6000]
+                print(f"[nexcut] unparseable model answer ({len(said)} chars): "
+                      f"{said[:300]!r}", flush=True)
         except Exception as exc:  # noqa: BLE001 - never lose the thread silently
             job.status = "error"
             traceback.print_exc()   # the terminal is the only place a real bug survives

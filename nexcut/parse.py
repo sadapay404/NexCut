@@ -95,6 +95,22 @@ def _balance_scan(text: str) -> str | None:
     return None
 
 
+def _looks_cut_off(text: str) -> bool:
+    """A reply that stops mid-object: more openers than closers.
+
+    Workers AI caps output at 256 tokens unless told otherwise, and a cut-off
+    report used to surface as "the answer has no clips key" — true, but useless.
+    """
+    stripped = text.rstrip()
+    if not stripped:
+        return False
+    if stripped[0] not in "{[":
+        return False
+    opens = stripped.count("{") + stripped.count("[")
+    closes = stripped.count("}") + stripped.count("]")
+    return opens > closes
+
+
 def extract_json(text: str) -> dict:
     """Pull the report object out of a model answer (fenced or bare)."""
     if not text or not text.strip():
@@ -114,6 +130,16 @@ def extract_json(text: str) -> dict:
             continue
         if isinstance(data, dict) and ("clips" in data or "longlist" in data):
             return data
+    if _looks_cut_off(text):
+        exc = FormatError(
+            f"the answer was cut off after {len(text)} characters — the model ran "
+            "out of output room before it finished the JSON"
+        )
+        exc.hint = ("The model's output budget was too small for a full report. "
+                    "NexCut now asks for 4096 tokens; if this repeats, raise it: put "
+                    "NEXCUT_MAX_TOKENS=6000 in .env and restart the server, or ask "
+                    "for fewer clips.")
+        raise exc
     raise FormatError("no JSON object with a clips/longlist key")
 
 

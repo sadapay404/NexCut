@@ -77,6 +77,7 @@ function makeFetch(log) {
     if (u.includes("/api/jobs/jobfail")) return json({
       status: "error", progress: 56, stage: "Failed", elapsed_s: 0.4, warnings: [],
       error: "TypeError: _HttpProvider.complete() got an unexpected keyword argument 'ctx'",
+      raw_answer: '{"sweep": {"longlist": 3}, "clips": 3}', 
       error_hint: "NexCut itself broke here — nothing you did.",
     });
     if (u.match(/\/api\/jobs\/[^/]+$/)) return json({
@@ -252,6 +253,9 @@ function makeFetch(log) {
   checks["error buttons"] = [...$("errorPane").querySelectorAll("button")]
     .map((b) => b.textContent.trim()).join(" / ");
   checks["run button re-armed"] = $("runBtn").disabled === false;
+  checks["raw answer shown"] = Boolean($("errorPane").querySelector(".fail-raw"));
+  checks["raw answer text"] = $("errorPane").querySelector(".fail-raw")
+    ? $("errorPane").querySelector(".fail-raw").textContent : "";
   failRun = false;
   const retryBtn = [...$("errorPane").querySelectorAll("button")]
     .find((b) => b.textContent.trim() === "Try again");
@@ -284,6 +288,7 @@ function makeFetch(log) {
     "failed fetch still opens details", "failed fetch drawer",
     "copy control", "copy fallback no crash", "copy fallback toast", "theme toggle no crash",
     "badge keeps id as tooltip", "error pane", "run button re-armed", "retry reaches results",
+    "raw answer shown",
   ];
   const mustBeNonZero = ["length presets", "clip rows", "download links", "packaging fields"];
   const mustContain = {
@@ -294,7 +299,8 @@ function makeFetch(log) {
     "clip badge auto": "AUTO", "clip badge manual": "7 clips", "asked": "7",
     "detail badge": "ready",
     "error title": "NexCut hit a bug",
-    "error buttons": "Try again / New link / Copy details", "clamped low": "5|5 clips", "clamped high": "15|15 clips",
+    "error buttons": "Try again / New link / Copy details",
+    "raw answer text": 'What the model returned{"sweep": {"longlist": 3}, "clips": 3}', "clamped low": "5|5 clips", "clamped high": "15|15 clips",
     "credits bold names": "Sheikh Arsalan+Mubashir",
     "zip href": "/api/cuts/cut1/zip" };
 
