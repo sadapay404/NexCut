@@ -647,6 +647,45 @@ class StubProvider:
         }
 
 
+class ManualProvider:
+    """Interactive copy-paste provider for testing without an API key."""
+    name = "manual"
+
+    def complete(self, *, system: str, user: str, **_) -> tuple[str, str]:
+        import pathlib
+        import subprocess
+        import time
+
+        root = pathlib.Path(__file__).resolve().parent.parent
+        prompt_path = root / "manual_prompt.txt"
+        answer_path = root / "manual_answer.json"
+
+        full_prompt = (
+            f"{system.strip()}\n\n"
+            f"---\n\n"
+            f"{user.strip()}\n\n"
+            "IMPORTANT: Return ONLY a single valid JSON object (no markdown fences, no commentary)."
+        )
+        prompt_path.write_text(full_prompt, encoding="utf-8")
+        answer_path.write_text("", encoding="utf-8")
+
+        try:
+            subprocess.run(["clip"], input=full_prompt.encode("utf-8"), check=False)
+        except Exception:  # noqa: BLE001
+            pass
+
+        print(f"\n[manual] Prompt saved to {prompt_path} (and copied to clipboard).")
+        print(f"[manual] Paste it into Claude, then paste Claude's JSON reply into {answer_path}\n", flush=True)
+
+        deadline = time.monotonic() + 600
+        while time.monotonic() < deadline:
+            text = answer_path.read_text(encoding="utf-8", errors="replace").strip()
+            if text:
+                return text, "manual-claude"
+            time.sleep(1.0)
+        raise TimeoutError_("Timed out waiting for manual_answer.json")
+
+
 def make_provider(api_key: str = "") -> object:
     # the browser no longer asks for a key: NEXCUT_API_KEY (or .env) wins, then the
     # provider's own conventional variable
@@ -655,6 +694,8 @@ def make_provider(api_key: str = "") -> object:
         keys = env_keys()
         api_key = keys[0] if keys else ""
     kind = provider_kind()
+    if kind == "manual":
+        return ManualProvider()
     if kind == "gemini":
         return GeminiProvider(api_key)
     if kind == "cloudflare":
