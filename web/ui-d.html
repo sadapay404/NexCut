@@ -44,7 +44,7 @@
         <button class="icon-btn" type="button" id="d-history-btn" data-role="history-btn" data-action="history" aria-label="History" title="History">
           <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
         </button>
-        <button class="icon-btn" type="button" data-role="theme-toggle" data-action="theme" aria-label="Toggle theme" title="Toggle theme"></button>
+        <button class="icon-btn" type="button" data-role="theme-toggle" data-action="theme" aria-label="Toggle theme" title="Toggle theme" hidden></button>
       </div>
     </div>
 
@@ -172,10 +172,15 @@
 
         <!-- 5 · results -->
         <section class="pane" data-role="pane-results" hidden>
-          <h2 class="h2" data-role="res-title">—</h2>
-          <p class="meta" data-role="res-meta"></p>
+          <div class="res-head">
+            <div>
+              <h2 class="h2" data-role="res-title">—</h2>
+              <p class="meta" data-role="res-meta"></p>
+            </div>
+            <a class="btn small primary" data-role="zip-link" href="#" download hidden><span class="ic" data-icon="download"></span>Download ZIP</a>
+          </div>
 
-          <p class="stats">
+          <p class="stats" hidden>
             <span><b data-role="stat-found">0</b> found</span>
             <span><b data-role="stat-kept">0</b> kept</span>
             <span><b data-role="stat-rejected">0</b> rejected</span>
@@ -186,7 +191,7 @@
 
           <div class="res-foot">
             <div class="foot-tools">
-              <label class="check"><input type="checkbox" data-role="zip-toggle"><span>Download as ZIP</span></label>
+              <label class="check" hidden><input type="checkbox" data-role="zip-toggle"><span>Download as ZIP</span></label>
               <button class="ghost" type="button" data-role="copy-answer" data-action="copy-answer"><span class="ic" data-icon="copy"></span>Copy answer</button>
               <button class="ghost" type="button" data-role="new-run" data-action="new-link">New link</button>
             </div>
@@ -194,7 +199,6 @@
               <span class="cut-label"><span class="ic" data-icon="scissors"></span>Cut 1080p</span>
               <div class="progress thin" data-role="cut-track" hidden><i data-role="cut-fill"></i></div>
               <span class="cut-state" data-role="cut-state" aria-live="polite"></span>
-              <a class="btn small" data-role="zip-link" href="#" hidden download>Download ZIP</a>
             </div>
           </div>
         </section>

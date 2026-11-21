@@ -1351,3 +1351,5 @@ kbd {
   padding-top: 10px;
   border-top: 1px solid var(--line);
 }
+
+.res-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }

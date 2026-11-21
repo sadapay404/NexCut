@@ -71,16 +71,7 @@
     });
     wrap.appendChild(timing);
 
-    if (pack.scores.length) {
-      var scores = N.el("dl", "pack-scores");
-      pack.scores.forEach(function (s) {
-        var cell = N.el("div");
-        cell.appendChild(N.el("dt", null, s.label));
-        cell.appendChild(N.el("dd", null, s.value));
-        scores.appendChild(cell);
-      });
-      wrap.appendChild(scores);
-    }
+    /* remove scores from details */
 
     pack.fields.forEach(function (f) {
       var block = N.el("div", "field-block" + (f.strong ? " strong" : ""));
