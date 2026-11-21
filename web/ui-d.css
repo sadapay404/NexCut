@@ -35,8 +35,8 @@
   --panel-2: #082016;
   --panel-3: #05150e;
   --panel-ink:   #f1f8f3;
-  --panel-ink-2: rgba(241, 248, 243, .68);
-  --panel-ink-3: rgba(241, 248, 243, .45);
+  --panel-ink-2: rgba(241, 248, 243, .74);
+  --panel-ink-3: rgba(241, 248, 243, .56);
   --panel-line:  rgba(255, 255, 255, .14);
 
   --logo-ink:  #f6fbf7;
@@ -203,7 +203,7 @@ textarea:focus-visible { outline: none; }
   border-radius: 10px;
 }
 
-.badge { width: 52px; height: 52px; display: block; }
+.badge { width: 64px; height: 64px; display: block; }
 .bd-frame, .bd-d { stroke: var(--logo-ink); stroke-linejoin: miter; stroke-linecap: butt; }
 .bd-x { stroke: var(--logo-x); }
 .bd-ring { stroke: var(--logo-ring); }
@@ -313,7 +313,7 @@ textarea:focus-visible { outline: none; }
 }
 
 .credits {
-  font-size: 10px;
+  font-size: 10.5px;
   line-height: 1.6;
   color: var(--panel-ink-3);
 }
