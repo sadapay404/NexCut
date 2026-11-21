@@ -138,20 +138,24 @@
       var li = N.el("li", "clip" + (isOpen ? " is-open" : ""));
       li.setAttribute("data-role", "clip-item");
 
-      var row = N.el("div", "clip-row");
-      row.appendChild(N.el("span", "clip-n", pad2(i + 1)));
-      row.appendChild(N.el("span", "t", clip.pack.title));
-      row.appendChild(N.el("span", "score" + (clip.pack.avg !== null && clip.pack.avg >= 8 ? " hi" : ""), clip.pack.avgText));
-      row.appendChild(actionFor(i));
+      var img = N.el("img", "clip-art");
+      var num = pad2(Math.min(i + 1, 15));
+      img.src = "/static/clips/clip-" + num + ".svg";
+      img.alt = "Clip " + pad2(i + 1);
+      li.appendChild(img);
 
-      var more = N.el("button", "ghost more", isOpen ? "Less" : "More");
+      li.appendChild(N.el("div", "clip-hook", clip.pack.title));
+
+      var bar = N.el("div", "clip-bar");
+      var more = N.el("button", "ghost more", isOpen ? "Hide Details" : "Details");
       more.type = "button";
       more.setAttribute("data-role", "clip-more");
       more.setAttribute("data-action", "more");
       more.setAttribute("data-index", String(i));
       more.setAttribute("aria-expanded", isOpen ? "true" : "false");
-      row.appendChild(more);
-      li.appendChild(row);
+      bar.appendChild(more);
+      bar.appendChild(actionFor(i));
+      li.appendChild(bar);
 
       if (isOpen) li.appendChild(packagingNode(clip.pack));
       list.appendChild(li);
