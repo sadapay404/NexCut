@@ -7,7 +7,7 @@ Four complete interfaces for the same tool, switchable without a rebuild:
 | **A · Editorial / print** | `/?ui=1` or `/ui-a.html` | `web/ui-a.html` |
 | **B · Console / tool** (default) | `/?ui=2` or `/ui-b.html` | `web/ui-b.html` |
 | **C · Cards / consumer** | `/?ui=3` or `/ui-c.html` | `web/ui-c.html` |
-| **D · Sleeve / record** | `/?ui=4` or `/ui-d.html` | `web/ui-d.html` |
+| **D · Field / brand panel** | `/?ui=4` or `/ui-d.html` | `web/ui-d.html` |
 
 Each page has a small "Preview · A | B | C | D" strip above the product. It sits
 outside the design. To ship a single direction, delete that one `<div class="switch">`
@@ -62,36 +62,32 @@ It optimises for a first-time user and for a phone. It suits someone who shares 
 tool with others, or who wants each step to feel guided. It is the most spacious of the
 three and the one that shows the least at once.
 
-## D · Sleeve / record
+## D · Field / brand panel
 
-A record sleeve on a screen. The page is one framed card: a rail across the top reads
-`SIDE A — <stage>` and carries the build tag, and everything happens inside it. Dark
-by default (the light theme is the paper sleeve), with one accent — vermilion — and
-warm off-white type.
+Built out of the logo's own colours, so the mark belongs to the page instead of sitting
+on it. The app is a two-column shell: a **deep-green brand panel** on the left — the
+same ground the logo was drawn on — and a **neutral work surface** beside it. The panel
+holds the mark at 52px, the wordmark (sans for *Sheikh Arsalan*, italic serif for
+*Automation*), the two tabs, and a ghosted mark at the foot. The credits and the build
+tag form the last strip of that column; on phones the whole thing becomes a band across
+the top, the tabs are a full-width pair, and the credits move to the foot of the page.
 
-The landing is the composition the owner asked for, in a different skin: his mark at
-92px, then **Sheikh Arsalan** in a heavy sans and *Automation* in an italic serif
-accent, one line of plain copy, and a single 58px URL bar with the button inside it —
-the field is the drop slot. No second call to action.
+The palette is the logo: deep green `#0d3021` → `#05150e`, white-green ink, and the
+mark's mint `#5ed898` for the ring, the play and the selected states. The accent on the
+surface is a deeper green so text keeps its contrast (`#0f7a47` on paper, `#3ddc8b` on
+dark). Light is the default; the toggle turns the surface dark and leaves the brand
+panel alone, because that panel *is* the identity.
 
-Details and the plan are two blocks side by side on a laptop and stacked on a phone.
-A run turns a real disc: fine grooves, a vermilion label carrying the mark, and a slow
-rotation that stops with `prefers-reduced-motion`. The progress bar is a transform, so
-the row never reflows while it moves. Results are printed as a **tracklist** — A1 …
-A8, then B1 — with the score, the download and More; More opens the packaging in
-place as sleeve notes: thumbnail text, search title, hashtags, hook, overlays.
+The work surface carries one column at 720px: the landing is a heading, one sentence
+and the URL bar with the button inside it; details are a two-column cell table; the
+plan is a labelled strip (clips, length, extract); progress is a large numeral over a
+3px rule; results are hairline rows — number, title, score, download, More — with the
+packaging opening in place under the row.
 
-The mark is the owner's logo, not a reduction of it: the corner brackets, the crossed
-tools, the record ring, the D and the play triangle are all there, redrawn as clean
-geometry and recoloured to the sleeve — warm white for the frame and the letter,
-vermilion for the ring and the play, the tools held back to 42% so they read as a
-watermark rather than noise. It is the same badge at 36px in the header and at 92px
-on the landing.
-
-It optimises for a first impression and for a settled layout: fixed heights on the
-bar, the URL bar, the tabs and every button; no control changes size when its label
-changes; 44px targets and 16px field text on touch; the tracklist gives its actions
-their own line under the title on a phone.
+It optimises for a strong first impression with a quiet work area: fixed control
+heights, a transform for progress so nothing reflows mid-run, 42–48px targets on touch,
+16px field text so iOS does not zoom, and a panel that becomes a band rather than
+squeezing the content.
 
 ## Requirements reinterpreted
 

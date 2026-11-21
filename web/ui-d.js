@@ -1,4 +1,4 @@
-/* NexCut — direction D, "Sleeve".
+/* NexCut — direction D, "Field".
    Layout and interaction only. Flow, state and the API live in core.js. */
 (function () {
   "use strict";
@@ -7,7 +7,7 @@
   var RS = function (name) { return N.roles(name); };
 
   var STAGES = ["landing", "details", "working", "error", "results"];
-  var RAIL = { landing: "Link intake", details: "Details & plan", working: "Working", error: "Stopped", results: "Tracklist" };
+  var RAIL = { landing: "New cut", details: "Source & plan", working: "Working", error: "Stopped", results: "Clips" };
 
   var app = null;
   var open = {};            // clip index → packaging open
@@ -20,10 +20,8 @@
   var maxClips = 15;
   var inited = false;
 
-  /* clips read as record sides: A1 … A8, then B1 */
-  function trackNo(i) {
-    var n = i + 1;
-    return n <= 8 ? "A" + n : "B" + (n - 8);
+  function pad2(n) {
+    return String(n).padStart(2, "0");
   }
 
   function selectedLen() {
@@ -59,7 +57,7 @@
     if (side) side.textContent = mode === "downloader" ? "Side B" : "Side A";
   }
 
-  /* sleeve notes: the packaging block, same shape as the other directions */
+  /* the packaging block, same shape as the other directions */
   function packagingNode(pack) {
     var wrap = N.el("div", "pack");
     wrap.setAttribute("data-role", "packaging");
@@ -150,11 +148,11 @@
     }
     clips.forEach(function (clip, i) {
       var isOpen = Boolean(open[i]);
-      var li = N.el("li", "track" + (isOpen ? " is-open" : ""));
+      var li = N.el("li", "clip" + (isOpen ? " is-open" : ""));
       li.setAttribute("data-role", "clip-item");
 
-      var row = N.el("div", "track-row");
-      row.appendChild(N.el("span", "track-n", trackNo(i)));
+      var row = N.el("div", "clip-row");
+      row.appendChild(N.el("span", "clip-n", pad2(i + 1)));
       row.appendChild(N.el("span", "t", clip.pack.title));
       row.appendChild(N.el("span", "score" + (clip.pack.avg !== null && clip.pack.avg >= 8 ? " hi" : ""), clip.pack.avgText));
       row.appendChild(actionFor(i));
