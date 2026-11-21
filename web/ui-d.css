@@ -1353,3 +1353,5 @@ kbd {
 }
 
 .res-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+.history-btn { gap: 6px; }

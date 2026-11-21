@@ -74,6 +74,7 @@
     /* remove scores from details */
 
     pack.fields.forEach(function (f) {
+      if (f.key === "safety") return;
       var block = N.el("div", "field-block" + (f.strong ? " strong" : ""));
       block.setAttribute("data-field", f.key);
       var key = N.el("div", "fk");
