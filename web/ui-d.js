@@ -1,4 +1,4 @@
-/* NexCut — direction D, "Field".
+/* Sheikh Arsalan Automation — production UI.
    Layout and interaction only. Flow, state and the API live in core.js. */
 (function () {
   "use strict";
@@ -22,6 +22,11 @@
 
   function pad2(n) {
     return String(n).padStart(2, "0");
+  }
+
+  function formatCutAt(value) {
+    var date = new Date(value || "");
+    return isNaN(date.getTime()) ? String(value || "Unknown time") : date.toLocaleString();
   }
 
   function selectedLen() {
@@ -86,7 +91,7 @@
       var block = N.el("div", "field-block" + (f.strong ? " strong" : ""));
       block.setAttribute("data-field", f.key);
       var key = N.el("div", "fk");
-      var label = f.label === "On-screen question" ? "Video Title" : f.label;
+      var label = f.label;
       key.appendChild(N.el("span", null, label));
       if (f.copy) {
         var btn = N.el("button", "copy", "Copy");
@@ -107,12 +112,16 @@
 
   function actionFor(index) {
     var file = lastFiles[index];
+    if (lastModel && lastModel.history) {
+      return N.el("span", "size act", "Files not retained");
+    }
     if (lastModel && lastModel.zip) {
       return N.el("span", "size act", file ? file.size_mb + " MB" : "in ZIP");
     }
     if (file) {
       var a = N.el("a", "btn small primary act", "Download");
       a.href = file.url;
+      a.textContent = "Download 1080p";
       a.setAttribute("download", file.name);
       a.setAttribute("data-role", "clip-download");
       return a;
@@ -140,7 +149,10 @@
 
       var row = N.el("div", "clip-row");
       row.appendChild(N.el("span", "clip-n", pad2(i + 1)));
-      row.appendChild(N.el("span", "t", clip.pack.title));
+      var headline = N.el("div", "clip-heading");
+      headline.appendChild(N.el("span", "t", clip.pack.title));
+      headline.appendChild(N.el("span", "clip-time", clip.pack.start + " – " + clip.pack.end + " · " + clip.pack.duration));
+      row.appendChild(headline);
       row.appendChild(N.el("span", "score" + (clip.pack.avg !== null && clip.pack.avg >= 8 ? " hi" : ""), clip.pack.avgText));
       row.appendChild(actionFor(i));
 
@@ -153,7 +165,11 @@
       row.appendChild(more);
       li.appendChild(row);
 
-      if (isOpen) li.appendChild(packagingNode(clip.pack));
+      var packShell = N.el("div", "pack-shell");
+      packShell.setAttribute("aria-hidden", isOpen ? "false" : "true");
+      packShell.inert = !isOpen;
+      packShell.appendChild(packagingNode(clip.pack));
+      li.appendChild(packShell);
       list.appendChild(li);
     });
   }
@@ -242,6 +258,14 @@
       R("progress-fill").style.transform = "scaleX(" + (pct / 100) + ")";
       N.put("pct-text", pct + "%");
       N.put("stage-text", p.stage || "Working");
+      var steps = Array.prototype.slice.call(document.querySelectorAll(".steps li"));
+      var active = pct < 20 ? 0 : pct < 42 ? 1 : pct < 66 ? 2 : pct < 88 ? 3 : 4;
+      steps.forEach(function (step, i) {
+        step.classList.toggle("is-done", i < active || pct >= 100);
+        step.classList.toggle("is-current", i === active && pct < 100);
+        if (i === active && pct < 100) step.setAttribute("aria-current", "step");
+        else step.removeAttribute("aria-current");
+      });
       var log = R("stage-log");
       if (p.reset) log.textContent = "";
       if (p.logLine) {
@@ -273,6 +297,14 @@
       N.put("stat-kept", model.stats.kept);
       N.put("stat-rejected", model.stats.rejected);
       N.put("stat-asked", model.stats.asked);
+      var rejected = model.dropped || [];
+      var droppedPanel = R("dropped-panel");
+      var droppedList = R("dropped-list");
+      droppedPanel.hidden = !rejected.length;
+      droppedList.textContent = "";
+      rejected.forEach(function (reason, i) {
+        droppedList.appendChild(N.el("li", null, "Candidate " + (i + 1) + " — " + reason));
+      });
       R("zip-toggle").checked = Boolean(model.zip);
       renderList();
       syncZipLink();
@@ -289,15 +321,19 @@
       renderList();
       syncZipLink();
 
-      if (c.clips && c.clips.length) {
+      if (c.history && c.history.clips && c.history.clips.length && cut.status === "done") {
         try {
           var hist = JSON.parse(localStorage.getItem("saa_history_d") || "[]");
-          var chEl = R("res-meta");
-          var channel = chEl ? (chEl.textContent || "").trim() : "";
           var now = new Date();
-          var cutAt = now.toLocaleDateString() + " " + now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-          var entry = { title: c.title || "Untitled", channel: channel || "YouTube", cutAt: cutAt, clips: c.clips };
-          if (!hist.length || hist[0].title !== entry.title || hist[0].clips.length !== entry.clips.length) {
+          var entry = {
+            id: String(c.history.runId),
+            title: c.history.title || "Untitled video",
+            channel: c.history.channel || "Unknown channel",
+            cutAt: now.toISOString(),
+            clips: c.history.clips,
+            stats: lastModel ? lastModel.stats : null
+          };
+          if (!hist.some(function (item) { return item.id === entry.id; })) {
             hist.unshift(entry);
             localStorage.setItem("saa_history_d", JSON.stringify(hist.slice(0, 20)));
           }
@@ -351,7 +387,10 @@
       cutter.hidden = open;
       if (open && list) {
         var items = [];
-        try { items = JSON.parse(localStorage.getItem("saa_history_d") || "[]"); } catch (_) {}
+        try {
+          items = JSON.parse(localStorage.getItem("saa_history_d") || "[]");
+          if (!Array.isArray(items)) items = [];
+        } catch (_) { items = []; }
         list.innerHTML = "";
         if (!items.length) {
           list.appendChild(N.el("p", "sub", "No cut history yet. Extract a video to see it here."));
@@ -361,22 +400,25 @@
           var btn = N.el("button", "history-item");
           btn.type = "button";
           btn.appendChild(N.el("div", "history-title", it.title || "Untitled video"));
-          btn.appendChild(N.el("div", "history-meta", (it.channel || "Unknown channel") + " · Cut " + (it.cutAt || "") + " · " + (it.clips ? it.clips.length : 0) + " clips"));
+          btn.appendChild(N.el("div", "history-meta", (it.channel || "Unknown channel") + " · Cut " + formatCutAt(it.cutAt) + " · " + (it.clips ? it.clips.length : 0) + " clips"));
           btn.addEventListener("click", function () {
             hp.hidden = true;
             cutter.hidden = false;
-            view.showPane("results");
-            view.setResults({
-              title: it.title || "History session",
-              meta: (it.channel || "") + " · Cut " + (it.cutAt || ""),
-              found: it.clips ? it.clips.length : 0,
-              kept: it.clips ? it.clips.length : 0,
-              rejected: 0,
-              asked: "AUTO",
-              clips: it.clips || [],
-              files: [],
-              zipUrl: ""
+            view.showStage("results");
+            var clips = (Array.isArray(it.clips) ? it.clips : []).map(function (clip, i) {
+              return clip && clip.pack ? clip : { index: i, n: Number(clip && clip.n) || i + 1, pack: N.packaging(clip) };
             });
+            view.renderResults({
+              ready: true,
+              history: true,
+              runId: it.id || ("history-" + String(it.cutAt || "")),
+              title: it.title || "History session",
+              meta: [it.channel || "Unknown channel", "Cut " + formatCutAt(it.cutAt)],
+              stats: it.stats || { found: clips.length, kept: clips.length, rejected: 0, asked: "AUTO" },
+              clips: clips,
+              zip: false
+            });
+            view.renderCut({ cut: { status: "warn", pct: 0, text: "Previously cut files are not retained in browser history." }, files: [], zipUrl: "" });
           });
           list.appendChild(btn);
         });
@@ -460,32 +502,13 @@
     }
 
     var manualBox = document.getElementById("d-manual-box");
-    var manualBtn = document.getElementById("d-manual-submit");
-    var manualTxt = document.getElementById("d-manual-json");
-    if (manualBox && manualBtn && manualTxt) {
+    if (manualBox) {
       fetch("/api/config").then(function (r) { return r.json(); }).then(function (cfg) {
         if (cfg && cfg.provider === "manual") {
           manualBox.hidden = false;
         }
       }).catch(function () {});
-      manualBtn.addEventListener("click", function () {
-        var val = (manualTxt.value || "").trim();
-        if (!val) { view.toast("Paste Claude's JSON first."); return; }
-        manualBtn.disabled = true;
-        fetch("/api/manual-answer", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: val })
-        }).then(function (r) {
-          if (!r.ok) throw new Error("Failed");
-          manualTxt.value = "";
-          view.toast("Submitted — processing clips…");
-        }).catch(function () {
-          view.toast("Failed to submit JSON.");
-        }).finally(function () {
-          manualBtn.disabled = false;
-        });
-      });
+
     }
   }
 

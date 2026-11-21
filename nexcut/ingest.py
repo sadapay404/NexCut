@@ -730,7 +730,7 @@ def fetch_transcript(url_or_id: str, *, language: str = "en", use_cache: bool = 
             "YouTube is blocking this machine's IP address.",
             "Every method hit 'Sign in to confirm you're not a bot', including on "
             "videos that certainly have captions — that is YouTube refusing this "
-            "network, not a problem with the video. Fix any of: run NexCut on your "
+            "network, not a problem with the video. Fix any of: run Sheikh Arsalan Automation on your "
             "own computer instead of a cloud shell, put a cookies.txt (exported from a "
             "browser) in the repo root and restart, or paste the transcript manually.",
         )

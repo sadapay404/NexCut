@@ -178,7 +178,7 @@ class OracleResult:
                     "why_it_works": c.why_it_works,
                     "share_trigger": c.share_trigger,
                     "safety": c.safety,
-                    "overlays": [{"offset": o.offset, "text": o.text} for o in c.overlays],
+                    "overlays": [],  # retained as an empty compatibility field; no overlay packaging is generated
                     "sfx": c.sfx,
                     "captions": c.captions,
                     "upload_caption": c.upload_caption,

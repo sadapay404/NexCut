@@ -57,7 +57,7 @@ def _clip_block(clip: dict) -> str:
         ("Verbal hook", clip.get("verbal_hook")),
         ("Thumbnail text", titles.get("clickbait")),
         ("Search title", titles.get("search")),
-        ("On-screen question", titles.get("debate")),
+        ("Video Title", titles.get("debate")),
         ("Upload caption", clip.get("upload_caption")),
         ("Hashtags", clip.get("hashtags")),
         ("Pinned comment", clip.get("pinned_comment")),

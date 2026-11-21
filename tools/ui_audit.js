@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Static audit of the three UI directions (ui-a, ui-b, ui-c) and the shared engine.
+ * Static audit of the production UI and shared engine.
  *
  *   node tools/ui_audit.js
  *
@@ -26,7 +26,7 @@ const core = read("web/core.js");
 
 /* ── 0. the old single-page client is gone; nothing points at it ─────── */
 for (const old of ["web/app.js", "web/style.css"]) {
-  if (exists(old)) add("FAIL", "cleanup", `${old} still exists`, "the old UI was replaced by the three directions");
+  if (exists(old)) add("FAIL", "cleanup", `${old} still exists`, "the old UI was replaced by the production UI");
 }
 
 let controlCount = 0;

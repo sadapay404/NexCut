@@ -1,8 +1,8 @@
 # MASTER PROMPT — VIRAL CLIP ENGINE (Phase 1 of 2: find, cut, package)
 
 Read every rule before answering. They are constraints, not suggestions: the app
-verifies timestamps, durations, scores and count after you answer, and silently
-drops any clip that breaks them.
+verifies timestamps, durations, scores and count after you answer. Any rejected
+candidate is shown to the user with its specific reason; never hide a near miss.
 
 ## RUN INPUTS (filled by the app, do not restate them)
 
@@ -81,10 +81,10 @@ question it leaves unanswered.
 - **Near-miss loop:** if fewer than required pass, tighten the start (move it
   forward to the event) or the end (stop one line earlier) on the best 7.0–7.9
   candidates, then re-score. Do this before accepting a shortfall.
-- **BACKUP tier:** if MAIN is still short, fill from the best remaining candidates
-  at 7.0+, label them `BACKUP`, and keep their real scores. **Never** deliver fewer
-  than required (or the AUTO Safe Minimum), and never inflate a score to reach the
-  count. MAIN first, then BACKUP.
+- The app enforces 8.0 as a strict delivery floor. Never label a sub-8 score as
+  MAIN or BACKUP, and never inflate scores. Return each independently verified
+  candidate with its honest score; the app will show exact rejection reasons and
+  a shortfall is preferable to fabricated dialogue or a false score.
 
 ### STEP 4 — START RULES (the first sentence decides everything)
 - Start **on** the event, or one sentence before it. Never on background, history
@@ -96,7 +96,7 @@ question it leaves unanswered.
 - Banned openers: greetings, ads, fillers ("um", "so yeah"), housekeeping, a line
   that only works after earlier context.
 - Pronoun test: if the opener leans on he/she/they, the packaging must name the
-  person (thumbnail text, on-screen question, or the first overlay).
+  person (thumbnail text, Video Title).
 
 ### STEP 5 — END RULES (this is what makes a clip travel)
 - End on an **open loop**, never on the resolution. Stop right after the tensest
@@ -148,7 +148,7 @@ the clip does not contain, and never invent a surname, case, date or outcome.
   love/letter 💌 · mystery 🤔🔍. Examples: "HE PRESSED IT 💀", "SHE KNEW 😳".
 - **Search title** (upload title) — under 70 characters, main keyword inside the
   first 3 words, question or curiosity shape, names/places included.
-- **On-screen question** (first 5–7 s, top centre) — 4–8 words, under 45 characters,
+- **Video Title** (first 5–7 s, top centre) — 4–8 words, under 45 characters,
   splits viewers into sides, 1–2 emojis. "Accident… or murder? 😳⚠️"
 - **Verbal hook** — the exact first spoken line, plus one sentence on why it stops
   the scroll.
@@ -165,8 +165,8 @@ List every Person, Place, Item and Document that matters to the delivered clips:
 (Confirmed / Partial). Never invent a surname. Flag look-alike names.
 
 ## SELF-AUDIT (silent — fix before answering)
-1. Count equals required, or the AUTO Best Number, never below the Safe Minimum?
-2. MAIN at {{gate}}+ and BACKUP at 7.0+, correctly labelled?
+1. Count equals required or AUTO Best Number when the transcript supports it; if short, are the reasons explicit?
+2. Every delivered clip is at {{gate}}+ with honest scores; no sub-gate BACKUP is included?
 3. Every clip starts on the event, not on context?
 4. Every clip ends open, not on the answer?
 5. Every duration inside {{window_min}}–{{window_max}}, arithmetic shown?

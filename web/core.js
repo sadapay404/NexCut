@@ -1,6 +1,6 @@
-/* NexCut — shared client engine.
+/* Shared client engine for Sheikh Arsalan Automation.
  *
- * Three UI directions (ui-a, ui-b, ui-c) render the same flow. This file owns
+ * The production UI renders the shared flow. This file owns
  * everything that is not layout: API calls, the stage machine, polling, the 1080p
  * cut, packaging fields, theme, icons and a copy fallback that works on plain
  * http://<lan-ip>:8137. A direction supplies a "view" that renders state and
@@ -129,7 +129,6 @@
     var c = clip && typeof clip === "object" ? clip : {};
     var t = c.titles && typeof c.titles === "object" ? c.titles : {};
     var s = c.scores && typeof c.scores === "object" ? c.scores : {};
-    var overlays = Array.isArray(c.overlays) ? c.overlays : [];
     var avg = s.avg === null || s.avg === undefined || s.avg === "" ? null : Number(s.avg);
     if (avg !== null && !isFinite(avg)) avg = null;
     var scores = Object.keys(s).filter(function (k) {
@@ -138,7 +137,7 @@
     var fields = [
       field("thumb", "Thumbnail text", t.clickbait, { copy: true, strong: true }),
       field("search", "Search title", t.search, { copy: true }),
-      field("question", "On-screen question", t.debate, { copy: true }),
+      field("question", "Video Title", t.debate, { copy: true }),
       field("caption", "Upload caption", c.upload_caption, { copy: true }),
       field("hashtags", "Hashtags", c.hashtags, { copy: true }),
       field("pinned", "Pinned comment", c.pinned_comment, { copy: true }),
@@ -164,10 +163,9 @@
       scores: scores,
       fields: fields,
       thumb: thumb ? thumb.value : "",
-      overlays: overlays.map(function (o) {
-        o = o && typeof o === "object" ? o : {};
-        return { offset: txt(o.offset), text: txt(o.text) };
-      }).filter(function (o) { return o.text; })
+      start: txt(c.start_stamp) || hms(c.start_sec),
+      end: txt(c.end_stamp) || hms(c.end_sec),
+      duration: txt(c.duration_str) || (isFinite(span) && span > 0 ? hms(span) : "—")
     };
   }
 
@@ -213,7 +211,7 @@
     if (/api key/i.test(m)) return "API key rejected";
     if (/cut off|output tokens|output room/i.test(m)) return "The answer was cut off";
     if (/caption/i.test(m)) return "Captions unavailable";
-    if (/^(TypeError|KeyError|AttributeError|NameError|IndexError|ValueError|OSError):/.test(m)) return "NexCut hit a bug";
+    if (/^(TypeError|KeyError|AttributeError|NameError|IndexError|ValueError|OSError):/.test(m)) return "Automation hit a bug";
     return "Run failed";
   }
 
@@ -553,7 +551,8 @@
             S.files = Array.isArray(cut.files) ? cut.files : [];
             view.renderCut({
               cut: { status: "done", pct: 100, text: S.files.length + " clip(s) · " + (cut.quality || "1080p") },
-              files: S.files, zipUrl: "/api/cuts/" + cutId + "/zip"
+              files: S.files, zipUrl: "/api/cuts/" + cutId + "/zip",
+              history: { title: S.result.video_title || "Untitled video", channel: S.result.channel || "", clips: buildModel().clips, runId: S.runId }
             });
           } else if (cut.status === "error") {
             clearInterval(S.timers.cut);

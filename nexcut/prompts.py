@@ -61,7 +61,6 @@ Return ONE JSON object and nothing else. No prose before or after, no markdown f
     "scores": {"curiosity": float, "stakes": float, "specificity": float, "speed": float, "avg": float},
     "verbal_hook": str, "ending": str, "why_it_works": str, "share_trigger": str,
     "safety": "none" or str,
-    "overlays": [{"offset": "mm:ss", "text": str}],
     "sfx": str, "captions": str, "upload_caption": str, "hashtags": str, "pinned_comment": str,
     "transcript_ts": "verbatim slice with timestamps",
     "transcript": "same slice without timestamps"

@@ -259,7 +259,7 @@ class JobManager:
             job.status = "error"
             traceback.print_exc()   # the terminal is the only place a real bug survives
             job.error = f"{type(exc).__name__}: {exc}"
-            job.error_hint = ("NexCut itself broke here — nothing you did. The full "
+            job.error_hint = ("Sheikh Arsalan Automation hit an internal error — nothing you did. The full "
                               "traceback is printed in the terminal running the server.")
             job.stage = "Failed"
         finally:

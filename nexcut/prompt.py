@@ -40,7 +40,6 @@ OUTPUT_SCHEMA = {
             "verbal_hook": "str", "ending": "str",
             "why_it_works": "str", "share_trigger": "str",
             "safety": "str|none",
-            "overlays": [{"offset": "mm:ss", "text": "str"}],
             "sfx": "str", "captions": "str", "upload_caption": "str",
             "hashtags": "str", "pinned_comment": "str",
             "transcript_ts": "verbatim slice with stamps",
@@ -109,8 +108,7 @@ def slice_transcript(transcript: str, start: int, end: int) -> str:
 
 SYSTEM = """You are a short-form video editor for TikTok, Reels and Shorts.
 You work only from the transcript you are given. You never invent dialogue,
-timestamps or events. If the transcript does not support a clip, you return
-fewer clips rather than guessing."""
+timestamps or events. Do not invent dialogue or timestamps. Return every defensible candidate and let the deterministic rule gate report any rejection."""
 
 
 def build_prompt(
@@ -183,7 +181,7 @@ them up as vertical-video clips for a {audience} audience, delivered in
 6. STRONG ENDING. End on a punchline, a twist, a visual/verbal mic-drop, or a
    sharp open loop — never trail off on filler or "so yeah".
 7. LENGTH HONESTY. If the transcript cannot fill the window without padding,
-   return fewer clips. Fewer good clips beats a padded one.
+   do not invent dialogue or stretch a weak beat. Return the strongest candidates you can verify; the app will explain any requested-count shortfall.
 8. NO DUPLICATES. Clips must not overlap in time, and must not reuse anything
    listed under `already_used`.
 9. SAFETY. No accusations against named private individuals, no addresses, no
@@ -194,7 +192,7 @@ them up as vertical-video clips for a {audience} audience, delivered in
 Score each clip 1-10 on: curiosity (does it open a loop), stakes (does it
 matter), specificity (concrete detail, not generalities), speed (does it move).
 `avg` is the mean of the four, to one decimal. Anything below {QUALITY_GATE}
-will be dropped, so do not pad the list with weak candidates.
+is a strict delivery threshold. Score candidates honestly, do not self-censor verified candidates, and include enough distinct candidates for the gate to evaluate.
 
 ## TITLES
 - clickbait: 6-10 words, curiosity only, no false claim.
@@ -207,8 +205,7 @@ Shape (keys exactly as named):
 {json.dumps(OUTPUT_SCHEMA, indent=2)}
 
 `transcript_ts` is a verbatim slice of the transcript between your two stamps.
-`transcript` is that same slice with the stamps stripped. `overlays` are at most
-three burn-in cues with `offset` as mm:ss from clip start.
+`transcript` is that same slice with the stamps stripped. No burned-in overlay copy is requested.
 
 ## TRANSCRIPT — {context["coverage"]}
 {body}

@@ -14,12 +14,12 @@ Env:
 
 from __future__ import annotations
 
-import io
 import json
 import mimetypes
 import os
 import re
 import time
+import tempfile
 import traceback
 import zipfile
 from http import HTTPStatus
@@ -384,6 +384,8 @@ class Handler(BaseHTTPRequestHandler):
                     height = int(params.get("height") or MIN_HEIGHT)
                 except (TypeError, ValueError):
                     return self._error(400, "height must be a number")
+                if height != 1080:
+                    return self._error(400, "Clip output is fixed at 1080p.")
                 cut_job = CUT_MANAGER.submit(
                     video_id=video_id, clips=clips, height=height,
                     title=job.result.get("video_title", ""),
@@ -421,6 +423,35 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:  # noqa: BLE001
             return self._error(500, f"Server error: {exc}")
 
+    def _stream_file(self, path: Path, ctype: str, extra: dict | None = None,
+                     *, remove_after: bool = False) -> None:
+        """Send a file in bounded chunks instead of retaining media in RAM."""
+        try:
+            size = path.stat().st_size
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(size))
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Cache-Control", "private, max-age=3600" if ctype == "video/mp4" else "no-cache")
+            for key, value in (extra or {}).items():
+                self.send_header(key, value)
+            self.end_headers()
+            if self.command != "HEAD":
+                with path.open("rb") as source:
+                    while chunk := source.read(1024 * 1024):
+                        self.wfile.write(chunk)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass
+        except OSError:
+            # A client disconnect or concurrent cleanup must not escape the handler.
+            pass
+        finally:
+            if remove_after:
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
     def _cut_zip(self, cut_id: str):
         cut_job = CUT_MANAGER.get(cut_id)
         if not cut_job:
@@ -428,27 +459,35 @@ class Handler(BaseHTTPRequestHandler):
         directory = CUT_MANAGER.directory(cut_id).resolve()
         if not directory.is_dir():
             return self._error(404, "That cut is gone")
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as bundle:
-            for item in sorted(directory.iterdir()):
-                if item.is_file() and item.name != "clips.zip":
-                    bundle.write(item, arcname=item.name)
-        data = buffer.getvalue()
-        name = f'nexcut-{cut_id}.zip'
-        return self._send(200, data, "application/zip",
-                          {"Content-Disposition": f'attachment; filename="{name}"'})
+        fd, temp_name = tempfile.mkstemp(prefix="download-", suffix=".zip", dir=directory)
+        os.close(fd)
+        archive = Path(temp_name)
+        try:
+            with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
+                for item in sorted(directory.iterdir()):
+                    if item.is_file() and item.name != "clips.zip" and item != archive:
+                        bundle.write(item, arcname=item.name)
+        except (OSError, zipfile.BadZipFile) as exc:
+            archive.unlink(missing_ok=True)
+            return self._error(500, f"Could not create the ZIP archive: {exc}")
+        name = f"clips-{cut_id}.zip"
+        return self._stream_file(archive, "application/zip", {
+            "Content-Disposition": f'attachment; filename="{name}"',
+        }, remove_after=True)
 
     def _cut_file(self, cut_id: str, filename: str):
         if not re.fullmatch(r"[A-Za-z0-9._-]+", filename or ""):
             return self._error(400, "Bad filename")
         directory = CUT_MANAGER.directory(cut_id).resolve()
         target = (directory / filename).resolve()
-        if not str(target).startswith(str(directory)) or not target.is_file():
+        try:
+            target.relative_to(directory)
+        except ValueError:
             return self._error(404, "File not found")
-        body = target.read_bytes()
-        return self._send(200, body, "video/mp4", {
+        if not target.is_file():
+            return self._error(404, "File not found")
+        return self._stream_file(target, "video/mp4", {
             "Content-Disposition": f'attachment; filename="{filename}"',
-            "Cache-Control": "private, max-age=3600",
         })
 
     # -- static ------------------------------------------------------------
@@ -456,13 +495,18 @@ class Handler(BaseHTTPRequestHandler):
         rel = "index.html" if path in ("/", "") else path.lstrip("/")
         if rel.startswith("static/"):
             rel = rel[len("static/"):]
-        target = (WEB / rel).resolve()
-        if not str(target).startswith(str(WEB.resolve())) or not target.is_file():
+        root = WEB.resolve()
+        target = (root / rel).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError:
+            return self._error(404, "Not found")
+        if not target.is_file():
             return self._error(404, "Not found")
         ctype = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
         if ctype.startswith("text/") or ctype in ("application/javascript",):
             ctype += "; charset=utf-8"
-        self._send(200, target.read_bytes(), ctype)
+        return self._stream_file(target, ctype)
 
 
 def _extract_upload(raw: bytes, ctype: str) -> str:

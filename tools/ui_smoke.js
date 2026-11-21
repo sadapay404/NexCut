@@ -1,10 +1,10 @@
-/* UI smoke test: boots each UI direction (ui-a, ui-b, ui-c) in jsdom against a
+/* UI smoke test: boots the production UI (ui-d) in jsdom against a
    stubbed API and walks the real flow: link → details → plan → extract → results
    → cut → packaging → copy → ZIP → failure → retry → downloader → reset.
    Every direction must expose the same data-role contract (see REQUIRED).
    Fails on any uncaught error, console.error, or missing role.
    Usage: node tools/ui_smoke.js            (all directions)
-          node tools/ui_smoke.js ui-b       (one direction) */
+          node tools/ui_smoke.js ui-d       (production UI) */
 const fs = require("fs");
 const path = require("path");
 const { JSDOM, VirtualConsole } = require("jsdom");
@@ -63,7 +63,7 @@ function makeFetch(state) {
       status: "error", progress: 56, stage: "Failed", elapsed_s: 0.4, warnings: [],
       error: "TypeError: _HttpProvider.complete() got an unexpected keyword argument 'ctx'",
       raw_answer: '{"sweep": {"longlist": 3}, "clips": 3}',
-      error_hint: "NexCut itself broke here — nothing you did.",
+      error_hint: "Sheikh Arsalan Automation hit an internal error — nothing you did.",
     });
     if (/\/api\/jobs\/[^/]+$/.test(u)) return json({ status: "done", progress: 100, stage: "Done", error: null, elapsed_s: 1.2, warnings: [] });
     if (/\/api\/jobs\/[^/]+\/cut/.test(u)) return json({ cut_id: "cut1" });
@@ -159,7 +159,7 @@ async function runDirection(name) {
   await wait(120);
   check("credits under the bar", role("credits-slot").contains(role("credits")));
   await wait(3300);
-  check("results visible", visible(role("pane-results")));
+  check("results visible with five-stage progress structure", visible(role("pane-results")) && doc.querySelectorAll(".steps li").length === 5);
   check("one clip row", roles("clip-item").length === 1);
   check("asked for 7", role("stat-asked").textContent.trim() === "7");
   check("download link per clip", roles("clip-download").length === 1);
@@ -235,7 +235,7 @@ async function runDirection(name) {
   role("run").click();
   await wait(1700);
   check("error pane", visible(role("pane-error")));
-  check("error title", role("error-title").textContent.trim() === "NexCut hit a bug");
+  check("error title", role("error-title").textContent.trim() === "Automation hit a bug");
   check("error hint shown", visible(role("error-hint")) && role("error-hint").textContent.includes("nothing you did"));
   check("raw answer shown", visible(role("error-raw")));
   check("raw answer text", (role("error-raw").textContent || "").includes('"clips": 3'));
@@ -267,10 +267,6 @@ async function runDirection(name) {
   check("credits text", ["Proudly Created by", "Sheikh Arsalan", "in Collaboration with", "Mubashir"].every((w) => credits.includes(w)));
   const bold = roles("credits")[0].querySelectorAll("b");
   check("credits bold names", bold.length === 2 && bold[0].textContent.trim() === "Sheikh Arsalan" && bold[1].textContent.trim() === "Mubashir");
-
-  /* 15 · the stepper and stage label stay truthful where they exist */
-  const stepLis = doc.querySelectorAll(".steps li");
-  if (stepLis.length) check("stepper has five steps", stepLis.length === 5);
 
   const failed = Object.entries(checks).filter(([, v]) => v === false).map(([k]) => k);
   const info = Object.entries(checks).filter(([, v]) => typeof v === "string").map(([k, v]) => `${k}: ${v}`);

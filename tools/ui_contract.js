@@ -17,4 +17,4 @@ const REQUIRED = [
   "credits", "credits-home", "toasts",
 ];
 
-module.exports = { REQUIRED, DIRECTIONS: ["ui-a", "ui-b", "ui-c", "ui-d"] };
+module.exports = { REQUIRED, DIRECTIONS: ["ui-d"] };

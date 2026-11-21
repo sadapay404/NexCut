@@ -5,17 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#0b2b1d">
-<title>Sheikh Arsalan Automation — NexCut</title>
-<link rel="stylesheet" href="/static/ui-d.css?v=16">
+<title>Sheikh Arsalan Automation</title>
+<link rel="stylesheet" href="/static/ui-d.css?v=17">
 <script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('saa_theme')==='dark'?'dark':'light')}catch(e){}</script>
 </head>
 <body>
-
-<!-- preview switcher: sits above the product, remove this one line to ship a single direction -->
-<div class="switch" role="navigation" aria-label="Interface preview">
-  <span>Preview</span>
-  <a href="ui-a.html">A</a><a href="ui-b.html">B</a><a href="ui-c.html">C</a><a href="ui-d.html" aria-current="page">D</a>
-</div>
 
 <div class="shell">
 
@@ -69,7 +63,7 @@
         <!-- 1 · landing -->
         <section class="pane landing" data-role="pane-landing">
           <h1 class="h1">Paste a YouTube link.</h1>
-          <p class="sub">NexCut reads the captions, plans the strongest ranges and cuts each clip to a 1080p MP4.</p>
+          <p class="sub">Read the transcript. Find the moments worth sharing. Prepare each clip in 1080p.</p>
 
           <div class="urlbar">
             <span class="url-ic" data-icon="link"></span>
@@ -145,8 +139,9 @@
           <div class="work-card">
             <div class="work-top">
               <span class="work-pulse" aria-hidden="true"></span>
-              <span class="work-badge">Extracting</span>
+              <span class="work-badge">TRANSCRIPT STUDIO · IN PROGRESS</span>
             </div>
+            <ol class="steps" aria-label="Extraction stages"><li>Read</li><li>Search</li><li>Score</li><li>Prepare</li><li>Review</li></ol>
             <div class="work-num"><b data-role="pct-text">0%</b></div>
             <h2 class="h2 stage-line" data-role="stage-text">Queued</h2>
             <div class="progress" aria-hidden="true"><i data-role="progress-fill"></i></div>
@@ -187,6 +182,10 @@
             <span><b data-role="stat-asked">AUTO</b> asked</span>
           </p>
 
+          <details class="dropped" data-role="dropped-panel" hidden>
+            <summary data-role="dropped-summary">Candidates not delivered</summary>
+            <ul data-role="dropped-list"></ul>
+          </details>
           <ol class="clips" data-role="clip-list"></ol>
 
           <div class="res-foot">
@@ -221,7 +220,7 @@
 </div>
 
 <div class="toasts" data-role="toasts" aria-live="polite"></div>
-<script src="/static/core.js?v=16"></script>
-<script src="/static/ui-d.js?v=16"></script>
+<script src="/static/core.js?v=17"></script>
+<script src="/static/ui-d.js?v=17"></script>
 </body>
 </html>

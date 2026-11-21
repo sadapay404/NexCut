@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import re
 
-from .schema import Clip, OracleResult, Overlay, Scores, SweepReport
+from .schema import Clip, OracleResult, Scores, SweepReport
 
 TIMEOUT_MSG = "Gemini is slow right now — the request timed out before it answered."
 NO_TIMESTAMPS_MSG = (
@@ -136,7 +136,7 @@ def extract_json(text: str) -> dict:
             "out of output room before it finished the JSON"
         )
         exc.hint = ("The model's output budget was too small for a full report. "
-                    "NexCut now asks for 4096 tokens; if this repeats, raise it: put "
+                    "The application now asks for 4096 tokens; if this repeats, raise it: put "
                     "NEXCUT_MAX_TOKENS=6000 in .env and restart the server, or ask "
                     "for fewer clips.")
         raise exc
@@ -192,12 +192,6 @@ def _clip_from_dict(d: dict, idx: int) -> Clip:
 
     titles = _as_dict(d.get("titles"))
 
-    overlays = [
-        Overlay(offset=_str(o.get("offset")), text=_str(o.get("text")))
-        for o in _as_list(d.get("overlays"))
-        if isinstance(o, dict)
-    ]
-
     return Clip(
         n=int(_num(d.get("n"), idx + 1) or idx + 1),
         hook_summary=_str(d.get("hook_summary")),
@@ -212,7 +206,7 @@ def _clip_from_dict(d: dict, idx: int) -> Clip:
         scores=scores,
         # [V] safety is suppressed in the UI when it is literally "none".
         safety=_str(d.get("safety")) or "none",
-        overlays=overlays,
+        overlays=[],
         sfx=_str(d.get("sfx")),
         captions=_str(d.get("captions")),
         upload_caption=_str(d.get("upload_caption")),
