@@ -334,6 +334,14 @@ class Handler(BaseHTTPRequestHandler):
                 params["video_id"] = youtube_id(params.get("youtube_url") or "")
                 job = MANAGER.submit(params)
                 return self._json(200, {"job_id": job.id})
+            if path == "/api/manual-answer":
+                body = self._json_body()
+                text = str(body.get("text") or "").strip()
+                if not text:
+                    return self._error(400, "Paste Claude's JSON response first.")
+                answer_path = ROOT / "manual_answer.json"
+                answer_path.write_text(text, encoding="utf-8")
+                return self._json(200, {"ok": True})
             if path == "/api/video-info":
                 if not self._authorised():
                     return self._error(403, "Invite code required")

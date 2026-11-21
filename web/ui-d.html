@@ -134,6 +134,13 @@
           <div class="work-num"><b data-role="pct-text">0%</b></div>
           <h2 class="h2 stage-line" data-role="stage-text">Queued</h2>
           <div class="progress" aria-hidden="true"><i data-role="progress-fill"></i></div>
+          <div class="own" id="d-manual-box" hidden>
+            <p class="hint">Manual mode: prompt copied to clipboard (and saved to <code>manual_prompt.txt</code>). Paste Claude's JSON reply below:</p>
+            <textarea id="d-manual-json" rows="6" placeholder='{"clips": [...]}'></textarea>
+            <div class="row-actions">
+              <button class="btn primary small" type="button" id="d-manual-submit">Submit JSON</button>
+            </div>
+          </div>
           <pre class="log" data-role="stage-log" aria-live="polite"></pre>
           <div class="credits-slot" data-role="credits-slot"></div>
         </section>

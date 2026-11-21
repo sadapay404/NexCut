@@ -379,6 +379,35 @@
     wireInputs();
     app = N.createApp(view);
     app.boot();
+
+    var manualBox = document.getElementById("d-manual-box");
+    var manualBtn = document.getElementById("d-manual-submit");
+    var manualTxt = document.getElementById("d-manual-json");
+    if (manualBox && manualBtn && manualTxt) {
+      fetch("/api/config").then(function (r) { return r.json(); }).then(function (cfg) {
+        if (cfg && cfg.provider === "manual") {
+          manualBox.hidden = false;
+        }
+      }).catch(function () {});
+      manualBtn.addEventListener("click", function () {
+        var val = (manualTxt.value || "").trim();
+        if (!val) { view.toast("Paste Claude's JSON first."); return; }
+        manualBtn.disabled = true;
+        fetch("/api/manual-answer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: val })
+        }).then(function (r) {
+          if (!r.ok) throw new Error("Failed");
+          manualTxt.value = "";
+          view.toast("Submitted — processing clips…");
+        }).catch(function () {
+          view.toast("Failed to submit JSON.");
+        }).finally(function () {
+          manualBtn.disabled = false;
+        });
+      });
+    }
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
