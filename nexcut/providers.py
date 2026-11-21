@@ -462,7 +462,11 @@ class OpenAIProvider(_HttpProvider):
         self.served_model = label
         try:
             msg = payload["choices"][0]["message"]
-            text = msg.get("content") or msg.get("reasoning_content") or msg.get("reasoning") or ""
+            text = msg.get("content") or ""
+            if not str(text).strip():
+                rc = msg.get("reasoning_content") or msg.get("reasoning") or ""
+                if "{" in str(rc) and "}" in str(rc):
+                    text = rc
         except (KeyError, IndexError, TypeError, AttributeError) as exc:
             raise ProviderError("The provider returned no message content.") from exc
         if not str(text).strip():
