@@ -96,10 +96,21 @@ class ServerCase(unittest.TestCase):
         self.assertTrue(body["ok"])
 
     def test_index_is_served(self):
+        # / is a redirect page: it sends the browser to a UI direction.
         with urllib.request.urlopen(self.base + "/", timeout=10) as r:
             html = r.read().decode()
         self.assertIn("Sheikh Arsalan Automation", html)
-        self.assertIn("/static/app.js", html)
+        self.assertIn("ui-a.html", html)
+
+    def test_direction_pages_load_the_engine(self):
+        # each direction page loads the shared engine and its own script
+        for page, script in [("/ui-a.html", "ui-a.js"), ("/ui-b.html", "ui-b.js"), ("/ui-c.html", "ui-c.js")]:
+            with urllib.request.urlopen(self.base + page, timeout=10) as r:
+                html = r.read().decode()
+            self.assertIn("/static/core.js", html, page)
+            self.assertIn("/static/" + script, html, page)
+            with urllib.request.urlopen(self.base + "/static/" + script, timeout=10) as r:
+                self.assertEqual(r.status, 200)
 
     def test_static_traversal_blocked(self):
         with self.assertRaises(urllib.error.HTTPError) as ctx:

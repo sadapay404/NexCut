@@ -125,11 +125,17 @@ with `ast` and fails if any provider class cannot accept those keywords. That is
 the bug that made every real run die with *"complete() got an unexpected keyword
 argument 'ctx'"* while 219 stub-based tests stayed green.
 
-The UI harness boots `web/index.html` + `web/app.js` against a stubbed API and
-fails on any exception, any `console.error`, or any empty critical node. It does
-not do layout — see `docs/ui-plan.md` for what that means. The audit covers what
-jsdom cannot: every control has a handler, every breakpoint exists, dead CSS is
-gone, and the clipboard fallback is still there.
+The UI has three directions (see `docs/ui-directions.md`) that share one engine (`web/core.js`): **UI A**
+(editorial), **UI B** (console, the default) and **UI C** (cards). Open
+`http://localhost:8137`, or `http://localhost:8137/?ui=1`, `?ui=2`, `?ui=3` to pick
+one. See `docs/ui-directions.md` for what each one optimises for.
+
+The UI harness boots each direction in jsdom against a stubbed API and walks the
+same flow for all three, failing on any exception, `console.error`, or missing
+requirement (`node tools/ui_smoke.js`). The static audit checks what jsdom cannot:
+every control has a handler, no CDN, the plain-http copy fallback, breakpoints,
+focus rings and reduced motion (`node tools/ui_audit.js`). The data-role contract
+both check lives in `tools/ui_contract.js`.
 
 ## API
 

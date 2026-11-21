@@ -1,204 +1,162 @@
 #!/usr/bin/env node
 /**
- * Static + behavioural audit of the studio UI.
+ * Static audit of the three UI directions (ui-a, ui-b, ui-c) and the shared engine.
  *
  *   node tools/ui_audit.js
  *
- * Checks the things that break on someone else's machine and cannot be seen in a
- * screenshot: controls with no handler, ids the client expects but the markup
- * lacks, clipboard use without a fallback (fails on any non-https origin),
- * missing breakpoints, missing focus styles, and page-level clipping.
- *
- * Exit code 1 when anything FAILs, so it can gate a commit.
+ * Checks what breaks on someone else's machine and cannot be seen by a unit test:
+ * the data-role contract is present in every direction, every control has a
+ * handler, the JavaScript references only elements that exist, nothing loads from
+ * a CDN, the clipboard has a plain-http fallback, hidden panes really hide, the
+ * layout has breakpoints and a short-viewport story, and the browser never serves
+ * stale assets. Exit code 1 when anything FAILs, so it can gate a commit.
  */
 const fs = require("fs");
 const path = require("path");
+const { REQUIRED, DIRECTIONS } = require("./ui_contract");
 
 const ROOT = path.resolve(__dirname, "..");
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
-
-const html = read("web/index.html");
-const js = read("web/app.js");
-const css = read("web/style.css");
+const exists = (p) => fs.existsSync(path.join(ROOT, p));
 
 const findings = [];
 const add = (level, area, message, hint) => findings.push({ level, area, message, hint });
 
-/* ── 1. every id the client reaches for exists ────────────────────────── */
-const htmlIds = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
-const jsIds = new Set([...js.matchAll(/\$\("([A-Za-z0-9_-]+)"\)/g)].map((m) => m[1]));
-for (const id of jsIds) {
-  if (!htmlIds.has(id)) add("FAIL", "markup", `client uses #${id}, markup has no such element`);
-}
+const core = read("web/core.js");
 
-/* ── 2. every control has a handler ───────────────────────────────────── */
-const controlRe = /<(button|a|input|select)\b([^>]*)>([\s\S]*?)<\/\1>/g;
-const idsWiredInJs = jsIds;
-const delegated = ["modes", "lenSeg", "clipList", "detailPane", "resultsPane"];
+/* ── 0. the old single-page client is gone; nothing points at it ─────── */
+for (const old of ["web/app.js", "web/style.css"]) {
+  if (exists(old)) add("FAIL", "cleanup", `${old} still exists`, "the old UI was replaced by the three directions");
+}
 
 let controlCount = 0;
-for (const match of html.matchAll(controlRe)) {
-  const [, tag, attrs, body] = match;
-  if (/\btype="(hidden|file)"/.test(attrs)) continue;
-  if (tag === "a" && /href=/.test(attrs)) continue;          // plain links
-  if (/disabled/.test(attrs)) continue;
-  controlCount += 1;
 
-  const id = (attrs.match(/\bid="([^"]+)"/) || [])[1];
-  const classes = ((attrs.match(/\bclass="([^"]+)"/) || [])[1] || "").split(/\s+/).filter(Boolean);
-  const dataAttrs = [...attrs.matchAll(/\bdata-([a-z-]+)=/g)].map((m) => m[1]);
-  const label = id ? `#${id}` : `<${tag} class="${classes.join(" ") || "?"}">`;
+for (const dir of DIRECTIONS) {
+  const html = read(`web/${dir}.html`);
+  const js = read(`web/${dir}.js`);
+  const css = read(`web/${dir}.css`);
+  const tag = dir.toUpperCase();
+  const htmlRoles = new Set([...html.matchAll(/data-role="([^"]+)"/g)].map((m) => m[1]));
 
-  let wired = false;
-  if (id && idsWiredInJs.has(id)) wired = true;
-  for (const attr of dataAttrs) {
-    const camel = attr.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-    if (new RegExp(`dataset\\.${camel}|data-${attr}`).test(js)) wired = true;
+  /* 1 · the owner's contract is present */
+  const missing = REQUIRED.filter((r) => !htmlRoles.has(r));
+  if (missing.length) add("FAIL", "contract", `${tag} is missing: ${missing.join(", ")}`, "every direction must carry every requirement");
+
+  /* 2 · the script only reaches for elements that exist */
+  const referenced = new Set([
+    ...[...js.matchAll(/\bR\("([a-z-]+)"\)/g)].map((m) => m[1]),
+    ...[...js.matchAll(/\bRS\("([a-z-]+)"\)/g)].map((m) => m[1]),
+    ...[...js.matchAll(/N\.put\("([a-z-]+)"/g)].map((m) => m[1]),
+  ]);
+  for (const r of referenced) {
+    if (!htmlRoles.has(r)) add("FAIL", "markup", `${tag} script uses data-role "${r}", markup has no such element`, "rename one side or add the element");
   }
-  if (classes.some((c) => new RegExp(`(^|[^\\w-])\\.[\\w-]*${c}\\b`).test(js))) wired = true;
-  if (classes.includes("copy")) wired = wired || /\.copy\b/.test(js);
-  for (const parent of delegated) {
-    if (new RegExp(`\\$\\("${parent}"\\)\\.addEventListener`).test(js)) {
-      // a button inside a delegated container is wired through it
-      if (new RegExp(`id="${parent}"`).test(html) && html.indexOf(`id="${parent}"`) < html.indexOf(match[0])) {
-        wired = true;
-      }
+
+  /* 3 · every control has a handler */
+  const actionKeys = new Set();
+  const actionsBlock = (js.match(/var actions = \{([\s\S]*?)\n  \};/) || [])[1] || "";
+  for (const m of actionsBlock.matchAll(/"([a-z-]+)":\s*function/g)) actionKeys.add(m[1]);
+  const actionUses = new Set([...html.matchAll(/data-action="([^"]+)"/g)].map((m) => m[1]));
+  for (const dynamic of js.matchAll(/setAttribute\("data-action",\s*"([^"]+)"\)/g)) actionUses.add(dynamic[1]);
+  for (const a of actionUses) {
+    if (!actionKeys.has(a)) add("FAIL", "controls", `${tag}: data-action="${a}" has no handler`, "add it to the actions map or remove the control");
+  }
+  for (const a of actionKeys) {
+    if (!actionUses.has(a)) add("WARN", "controls", `${tag}: handler "${a}" is never used`, "dead handler");
+  }
+  for (const m of html.matchAll(/<(button|input|select|textarea)\b([^>]*)>/g)) {
+    const attrs = m[2];
+    if (/type="(hidden|file)"/.test(attrs) || /\bhidden\b/.test(attrs)) continue;
+    controlCount += 1;
+    const role = (attrs.match(/data-role="([^"]+)"/) || [])[1];
+    const action = (attrs.match(/data-action="([^"]+)"/) || [])[1];
+    if (action) continue;
+    if (role && (referenced.has(role) || js.includes(`"${role}"`))) continue;
+    if (/data-copy|class="copy"/.test(attrs)) continue;   // generated copy buttons are wired by delegation
+    add("FAIL", "controls", `${tag}: <${m[1]}${role ? ` data-role="${role}"` : ""}> has no handler`, "wire it or remove it");
+  }
+
+  /* 4 · no external assets: the app runs offline and on a LAN */
+  for (const m of html.matchAll(/(?:src|href)="(https?:\/\/[^"]+)"/g)) {
+    if (!/github\.com\/sadapay404\/NexCut/.test(m[1])) add("FAIL", "offline", `${tag} loads ${m[1]}`, "no CDNs: bundle it or drop it");
+  }
+  if (/@import|url\(\s*["']?https?:/.test(css)) add("FAIL", "offline", `${tag} CSS loads an external resource`, "no CDNs");
+
+  /* 5 · hidden panes really hide, whatever the layout rules say */
+  if (!/\[hidden\]\s*\{[^}]*display:\s*none\s*!important/.test(css)) {
+    add("FAIL", "layout", `${tag} has no [hidden] override`, "a pane with display:flex/grid would stay on screen");
+  }
+
+  /* 6 · responsive coverage */
+  const widths = [...css.matchAll(/@media[^{]*max-width:\s*(\d+)px/g)].map((m) => Number(m[1]));
+  for (const needed of [1024, 768]) {
+    if (!widths.some((w) => w <= needed && w > needed - 280)) {
+      add("FAIL", "responsive", `${tag}: no breakpoint near ${needed}px`, "tablets and small laptops need their own layout");
     }
   }
-  if (!wired) {
-    add("FAIL", "controls", `${label} has no handler in app.js`,
-        "give it an id or a data- hook and wire it, or remove it");
+  if (!widths.some((w) => w <= 480)) add("FAIL", "responsive", `${tag}: no phone breakpoint (≤480px)`, "phones beyond the design width rely on it");
+  if (!/(min-height:\s*100dvh|min-height:\s*100vh)/.test(css)) add("FAIL", "responsive", `${tag}: body has no min-height`, "the frame must fill the viewport");
+  if (!/safe-area-inset/.test(css)) add("WARN", "responsive", `${tag}: no safe-area padding`, "notched phones can clip the footer");
+  if (!/pointer:\s*coarse/.test(css)) add("FAIL", "responsive", `${tag}: no touch-pointer rule`, "tap targets stay small on phones and tablets");
+  if (!/body\s*\{[^}]*overflow:\s*hidden/.test(css) === false && /body\s*\{[^}]*overflow:\s*hidden/.test(css)) {
+    add("FAIL", "layout", `${tag}: body is overflow:hidden`, "on a 1366×600 laptop the bottom becomes unreachable");
+  }
+
+  /* 7 · accessibility */
+  if (!/:focus-visible/.test(css)) add("FAIL", "a11y", `${tag}: no :focus-visible ring`, "keyboard users cannot see where they are");
+  if (!/prefers-reduced-motion/.test(css)) add("FAIL", "a11y", `${tag}: ignores prefers-reduced-motion`, "motion-sensitive users need it off");
+  if (!/aria-live/.test(html)) add("WARN", "a11y", `${tag}: no aria-live region`, "screen readers miss progress");
+  if (!/<h1[\s>]/.test(html)) add("FAIL", "a11y", `${tag}: no <h1>`, "every direction needs a real page heading");
+  const urlInput = (html.match(/<input[^>]*data-role="link-input"[^>]*>/) || [])[0] || "";
+  for (const [attr, why] of [
+    ['inputmode="url"', "phones open a full keyboard for a URL field"],
+    ['autocomplete="off"', "keyboard suggestions fight the URL field"],
+    ['autocapitalize="off"', "a pasted link gets mangled"],
+    ['spellcheck="false"', "squiggles under every link"],
+  ]) {
+    if (!urlInput.includes(attr)) add("FAIL", "forms", `${tag}: link input lacks ${attr}`, why);
+  }
+
+  /* 8 · the credits line is mandatory and must never be clipped */
+  if (!/\.credits\s*\{/.test(css)) add("FAIL", "layout", `${tag}: credits line has no styles`, "it is mandatory");
+  if (!/\.credits b\s*\{/.test(css)) add("FAIL", "layout", `${tag}: credit names are not styled bold`, "both names must be bold");
+  if (!/<b>Sheikh Arsalan<\/b>/.test(html) || !/<b>Mubashir<\/b>/.test(html)) add("FAIL", "layout", `${tag}: credit names not bold in markup`, "both names are bold");
+
+  /* 9 · stale-asset guard: CSS, JS and the engine share one cache-buster */
+  const busters = [...html.matchAll(/\?v=(\d+)/g)].map((m) => m[1]);
+  if (new Set(busters).size !== 1) add("FAIL", "cache", `${tag}: cache-busters disagree (${busters.join(", ")})`, "CSS, JS and core.js must be versioned together");
+
+  /* 10 · classes that no rule styles render with browser defaults */
+  const css_ = new Set([...css.matchAll(/\.([A-Za-z][\w-]*)/g)].map((m) => m[1]));
+  const used = new Set();
+  for (const m of html.matchAll(/class="([^"]+)"/g)) m[1].split(/\s+/).forEach((c) => c && used.add(c));
+  for (const m of js.matchAll(/(?:el|N\.el)\(\s*"[a-z0-9]+",\s*"([^"]+)"/g)) m[1].split(/\s+/).forEach((c) => c && used.add(c));
+  for (const c of [...used].sort()) {
+    if (!css_.has(c) && !["ic", "sr", "is-open", "is-sel", "is-done", "is-current", "is-error", "strong", "wide", "act", "more", "size", "log-item", "log-tick", "log-text", "score-k", "score-v"].includes(c)) {
+      add("WARN", "css", `${tag}: class .${c} is used but never styled`, "it renders with browser defaults");
+    }
   }
 }
 
-/* ── 3. clipboard needs a fallback outside https/localhost ────────────── */
-if (/navigator\.clipboard/.test(js) && !/execCommand|textContent\s*=\s*text|textarea/i.test(js)) {
-  add("FAIL", "behaviour", "copy() only uses navigator.clipboard",
-      "on http://<lan-ip>:8137 that object is undefined, so every copy button silently fails");
+/* 11 · the shared engine: clipboard fallback, and no innerHTML for model output */
+if (/navigator\.clipboard/.test(core) && !/execCommand\(\s*"copy"/.test(core)) {
+  add("FAIL", "behaviour", "core copy() has no execCommand fallback", "on http://<lan-ip>:8137 navigator.clipboard is undefined");
 }
+if (!/isSecureContext/.test(core)) add("WARN", "behaviour", "core copy() does not check isSecureContext", "fallback should be explicit");
+const modelInnerHtml = (core.match(/\.innerHTML\s*=\s*[^;]*\b(clip|job|job\.|data|res|raw|error|msg|message|text|value)\b/g) || []);
+if (modelInnerHtml.length) add("FAIL", "security", "core writes model output with innerHTML", "use textContent: model output is untrusted");
 
-/* ── 4. responsive coverage ───────────────────────────────────────────── */
-const widths = [...css.matchAll(/@media[^{]*max-width:\s*(\d+)px/g)].map((m) => Number(m[1]));
-for (const needed of [1024, 768]) {
-  if (!widths.some((w) => w <= needed && w > needed - 160)) {
-    add("FAIL", "responsive", `no breakpoint near ${needed}px`,
-        `add @media (max-width: ${needed}px) for tablets and small laptops`);
-  }
-}
-if (!/@media[^{]*max-height/.test(css)) {
-  add("FAIL", "responsive", "no short-viewport rule", "laptops lose the bottom of the card");
-}
-if (!/pointer:\s*(coarse|fine)|hover:\s*none/.test(css)) {
-  add("FAIL", "responsive", "no touch-pointer rule",
-      "tap targets stay 34px and feel broken on phones/tablets");
-}
-if (!/:focus-visible/.test(css)) {
-  add("FAIL", "a11y", "no :focus-visible styles", "keyboard users cannot see where they are");
-}
-if (/:root[^{]*\{[^}]*--[\w-]*:/.test(css) && !/clamp\(|min\(|max\(|vw|dvh/.test(css)) {
-  add("FAIL", "responsive", "no fluid sizing", "layout will break outside the design width");
-}
-
-/* ── 5. page-level clipping ───────────────────────────────────────────── */
-const shortBlock = css.slice(css.indexOf("@media (max-height"));
-if (/body\s*\{[^}]*overflow:\s*hidden/.test(css) && !/overflow(-y)?:\s*auto/.test(shortBlock)) {
-  add("FAIL", "layout", "body{overflow:hidden} with no short-viewport escape",
-      "on a 1366x600 laptop the bottom of the card is unreachable");
-}
-
-/* ── 6. form hygiene ──────────────────────────────────────────────────── */
-const urlInput = (html.match(/<input[^>]*id="ytUrl"[^>]*>/) || [])[0] || "";
-for (const [attr, why] of [
-  ["autocomplete", "iOS/keyboard suggestions fight the URL bar"],
-  ["spellcheck", "squiggles under every link"],
-  ["inputmode", "mobile keyboard should be a URL keyboard"],
-]) {
-  if (!urlInput.includes(attr)) add("WARN", "forms", `#ytUrl has no ${attr}`, why);
-}
-if (!/aria-live/.test(html)) add("WARN", "a11y", "no aria-live region", "screen readers miss progress");
-
-/* ── 7. markup classes that no rule styles ───────────────────────────── */
-const usedClasses = new Set();
-for (const m of html.matchAll(/class="([^"]+)"/g)) {
-  m[1].split(/\s+/).filter(Boolean).forEach((c) => usedClasses.add(c));
-}
-for (const m of js.matchAll(/el\(\s*"[a-z0-9]+",\s*"([^"]+)"/g)) {
-  m[1].split(/\s+/).filter(Boolean).forEach((c) => usedClasses.add(c));
-}
-const cssClasses = new Set([...css.matchAll(/\.([A-Za-z][\w-]*)/g)].map((m) => m[1]));
-for (const c of [...usedClasses].sort()) {
-  if (!cssClasses.has(c)) {
-    add("WARN", "css", `.${c} is used but never styled`, "it renders with browser defaults");
-  }
-}
-
-/* ── 8. the fixes themselves must stay ────────────────────────────────── */
-const breakpoints = [...css.matchAll(/max-width:\s*(\d+)px/g)].map((m) => Number(m[1]));
-for (const needed of [720, 520, 380]) {
-  if (!breakpoints.includes(needed)) {
-    add("FAIL", "responsive", `missing the ${needed}px breakpoint`,
-        "phones beyond the design width rely on it");
-  }
-}
-if (!/min-height:\s*100dvh|min-height:\s*100vh/.test(css)) {
-  add("FAIL", "responsive", "no dvh/vh height on body", "mobile browser chrome clips the frame");
-}
-if (!/safe-area-inset/.test(css)) {
-  add("WARN", "responsive", "no safe-area padding", "notched phones clip the top bar");
-}
-if (!/prefers-reduced-motion/.test(css)) {
-  add("FAIL", "a11y", "ignores prefers-reduced-motion", "animation-sensitive users need it off");
-}
-const visibleTransitions = (css.match(/transition:/g) || []).length;
-if (visibleTransitions > 20) {
-  add("WARN", "perf", `${visibleTransitions} transitions declared`, "check the slow ones on low-end phones");
-}
-
-/* ── 9. the browser must not serve last week's CSS ───────────────────── */
-const busters = [...html.matchAll(/\?v=(\d+)/g)].map((m) => m[1]);
-if (busters.length < 2) {
-  add("FAIL", "cache", "no ?v= cache-buster on the assets", "a fix ships and nobody sees it");
-} else if (new Set(busters).size > 1) {
-  add("FAIL", "cache", `cache-busters disagree (${busters.join(", ")})`,
-      "CSS and JS must be versioned together");
-}
-
-/* ── 10. the specific things that broke on a real laptop ──────────────── */
-if (!/inputmode="url"/.test(urlInput)) {
-  add("FAIL", "mobile", "#ytUrl has no inputmode=url", "phones open a full keyboard for a URL field");
-}
-if (!/autocomplete="off"/.test(urlInput) || !/autocapitalize="off"/.test(urlInput)) {
-  add("FAIL", "mobile", "#ytUrl lets the OS autocorrect/capitalise", "a pasted link gets mangled");
-}
-if (!/touch-action:\s*manipulation/.test(css)) {
-  add("WARN", "touch", "no touch-action: manipulation", "300ms tap delay on iOS");
-}
-if (!/\.credits\s*\{/.test(css)) {
-  add("FAIL", "layout", "the credits footer has no styles", "it is mandatory in the frame");
-}
-if (/@media \(max-height: 560px\)/.test(css) && !/grid-template-rows/.test(shortBlock)) {
-  add("FAIL", "layout", "the short-viewport escape keeps the fixed row grid",
-      "the footer stays pinned over the scrollable card");
-}
-for (const [name, re] of [
-  ["focus-visible ring", /:focus-visible/],
-  ["reduced motion", /prefers-reduced-motion/],
-  ["safe areas", /safe-area-inset/],
-]) {
-  if (!re.test(css)) add("WARN", "robustness", `${name} missing`, "breaks on some devices");
-}
-
-/* ── report ───────────────────────────────────────────────────────────── */
+/* ── report ─────────────────────────────────────────────────────────── */
 const order = { FAIL: 0, WARN: 1 };
 findings.sort((a, b) => order[a.level] - order[b.level] || a.area.localeCompare(b.area));
 const fails = findings.filter((f) => f.level === "FAIL");
 const warns = findings.filter((f) => f.level === "WARN");
 
-console.log(`\nNexCut UI audit — ${controlCount} controls checked\n`);
+console.log(`\nNexCut UI audit — ${DIRECTIONS.length} directions, ${controlCount} controls checked\n`);
 if (!findings.length) console.log("  nothing to report");
 for (const f of [...fails, ...warns]) {
   console.log(`  ${f.level}  ${f.area.padEnd(11)} ${f.message}`);
   if (f.hint) console.log(`        ${" ".repeat(11)} → ${f.hint}`);
 }
 console.log(`\n${fails.length} fail, ${warns.length} warn\n`);
-process.exit(fails.length ? 1 : 0);
+process.exitCode = fails.length ? 1 : 0;

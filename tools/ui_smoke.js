@@ -1,329 +1,300 @@
-/* UI smoke test: boots index.html + app.js in jsdom against a stubbed API.
-   Walks the real flow: paste link → details → config → extract → results → cut.
-   Fails on any uncaught error, any console.error, and any empty critical node.
-   Usage: node tools/ui_smoke.js */
+/* UI smoke test: boots each UI direction (ui-a, ui-b, ui-c) in jsdom against a
+   stubbed API and walks the real flow: link → details → plan → extract → results
+   → cut → packaging → copy → ZIP → failure → retry → downloader → reset.
+   Every direction must expose the same data-role contract (see REQUIRED).
+   Fails on any uncaught error, console.error, or missing role.
+   Usage: node tools/ui_smoke.js            (all directions)
+          node tools/ui_smoke.js ui-b       (one direction) */
 const fs = require("fs");
 const path = require("path");
 const { JSDOM, VirtualConsole } = require("jsdom");
 
 const ROOT = path.resolve(__dirname, "..");
-const html = fs.readFileSync(path.join(ROOT, "web/index.html"), "utf8")
-  .replace(/<script src="\/static\/app\.js[^"]*"><\/script>/, "");
+const { DIRECTIONS } = require("./ui_contract");
+
+const { REQUIRED } = require("./ui_contract");
 
 const CONFIG = {
-  version: "v0.1.0",
-  provider: "stub",
-  min_height: 1080,
-  min_clips: 5,
-  max_clips: 15,
-  default_window: "40-50",
-  tools: { ffmpeg: true, ffprobe: true, yt_dlp: true, can_cut: true, hints: {} },
+  version: "v0.1.0", provider: "stub", min_height: 1080, min_clips: 5, max_clips: 15,
+  default_window: "40-50", tools: { ffmpeg: true, ffprobe: true, yt_dlp: true, can_cut: true, hints: {} },
   prompt: { master_loaded: true, location: "prompts/master.md" },
-  windows: [
-    { id: "40-50", label: "40–50 s" },
-    { id: "60-90", label: "60–90 s" },
-    { id: "90-180", label: "90–180 s" },
-    { id: "custom", label: "Custom range" },
-  ],
+  windows: [{ id: "40-50", label: "40–50 s" }],
 };
-
 const TRANSCRIPT = {
-  text: "00:00:08 - a line\n00:01:03 - another", lines: 2, seconds: 63,
-  is_auto: true, title: "The Third Floor", channel: "Cold Case Files",
-  video_id: "dQw4w9WgXcQ", source: "youtube-captions",
+  text: "00:00:08 - a line\n00:01:03 - another", lines: 2, seconds: 63, is_auto: true,
+  title: "The Third Floor", channel: "Cold Case Files", video_id: "dQw4w9WgXcQ",
+  source: "youtube-captions", chars: 30,
 };
-
+const CLIP = {
+  n: 1, hook_summary: "door logged locked", start_sec: 8, end_sec: 63,
+  start_stamp: "00:00:08", end_stamp: "00:01:03", duration_str: "0 min 55 sec", ending: "Cliffhanger",
+  titles: { clickbait: "HE PRESSED IT 💀", search: "Who used his badge?", debate: "Accident… or murder? 😳" },
+  scores: { curiosity: 9, stakes: 8, specificity: 9, speed: 8, avg: 8.5 },
+  verbal_hook: "vh", why_it_works: "why", share_trigger: "st", safety: "none",
+  overlays: [{ offset: "00:02", text: "LBL" }], sfx: "sfx", captions: "cap",
+  upload_caption: "uc", hashtags: "#a #b", pinned_comment: "pc", transcript_ts: "t", transcript: "t",
+};
 const RESULTS = {
   video_id: "dQw4w9WgXcQ", video_title: "The Third Floor", channel: "Cold Case Files",
-  transcript_source: "youtube-captions", model_used: "offline-demo",
-  ranges_planned: "00:00:00-00:01:00",
-  sweep: { longlist: 6, cleared: 2, window: "40-50", ranges: "00:00:00-00:01:00" },
-  longlist: [], dropped: [{ clip: 2, reason: "average score 6.0 is below the 8.0 quality gate" }],
-  oracle_report: "{}",
-  clips: [{
-    n: 1, hook_summary: "door logged locked", start_sec: 8, end_sec: 63,
-    start_stamp: "00:00:08", end_stamp: "00:01:03",
-    start_sentence: "The detective arrived at midnight.", end_sentence: "The alibi collapsed.",
-    duration_str: "00:00:55", duration_line: "0 min 55 sec", ending: "Cliffhanger",
-    titles: { clickbait: "HE PRESSED IT 💀", search: "Who used his badge?", debate: "Accident… or murder? 😳" },
-    scores: { curiosity: 9, stakes: 8, specificity: 9, speed: 8, avg: 8.5 },
-    verbal_hook: "vh", why_it_works: "why", share_trigger: "st",
-    safety: "none", overlays: [{ offset: "00:02", text: "LBL" }],
-    sfx: "sfx", captions: "cap", upload_caption: "uc", hashtags: "#a #b",
-    pinned_comment: "pc", transcript_ts: "t", transcript: "t",
-  }],
+  transcript_source: "youtube-captions", model_used: "offline-demo", ranges_planned: "00:00:00-00:01:00",
+  sweep: { longlist: 6, cleared: 2, window: "40-50", ranges: "00:00:00-00:01:00" }, longlist: [],
+  dropped: [{ clip: 2, reason: "average score 6.0 is below the 8.0 quality gate" }],
+  oracle_report: "{}", clips: [CLIP],
 };
+const FILES = [{ name: "clip-01_00-00-08_00-01-03.mp4", size_mb: 12.4, url: "/api/cuts/cut1/file/clip-01.mp4" }];
 
-let failTranscript = false;   // toggled by the failure-path test below
-let failRun = false;          // a run that dies inside the server (the ctx bug)
-
-function makeFetch(log) {
+function makeFetch(state) {
   return async (url, opts = {}) => {
     const u = String(url);
-    log.push(`${(opts.method || "GET")} ${u}`);
+    state.calls.push(`${opts.method || "GET"} ${u}`);
     const json = (obj, status = 200) => ({
       ok: status < 400, status,
       json: async () => obj,
-      blob: async () => obj,
       headers: { get: () => "application/json" },
     });
     if (u.includes("/api/config")) return json(CONFIG);
     if (u.includes("/api/transcript")) {
-      if (failTranscript) return json({ detail: "NO CAPTIONS", hint: "Paste a transcript instead." }, 502);
+      if (state.failTranscript) return json({ detail: "NO CAPTIONS", hint: "Paste a transcript instead." }, 422);
       return json(TRANSCRIPT);
     }
-    if (u.includes("/api/extract")) return json({ job_id: failRun ? "jobfail" : "job1" });
-    if (u.match(/\/api\/jobs\/[^/]+\/results/)) return json(RESULTS);
+    if (u.includes("/api/extract")) return json({ job_id: state.failRun ? "jobfail" : "job1" });
+    if (/\/api\/jobs\/[^/]+\/results/.test(u)) return json(state.noClips ? { ...RESULTS, clips: [] } : RESULTS);
     if (u.includes("/api/jobs/jobfail")) return json({
       status: "error", progress: 56, stage: "Failed", elapsed_s: 0.4, warnings: [],
       error: "TypeError: _HttpProvider.complete() got an unexpected keyword argument 'ctx'",
-      raw_answer: '{"sweep": {"longlist": 3}, "clips": 3}', 
+      raw_answer: '{"sweep": {"longlist": 3}, "clips": 3}',
       error_hint: "NexCut itself broke here — nothing you did.",
     });
-    if (u.match(/\/api\/jobs\/[^/]+$/)) return json({
-      status: "done", progress: 100, stage: "Done", error: null, elapsed_s: 1.2, warnings: [],
-    });
-    if (u.includes("/api/video-quality")) return json({ qualities: [2160, 1440, 1080] });
-    if (u.match(/\/api\/jobs\/[^/]+\/cut/)) return json({ cut_id: "cut1" });
-    if (u.match(/\/api\/cuts\/[^/]+$/)) return json({
-      status: "done", progress: 100, stage: "ready", quality: "1080p",
-      files: [
-        { name: "clip-01_00-00-08_00-01-03.mp4", size_mb: 12.4, url: "/api/cuts/cut1/file/clip-01.mp4" },
-      ],
-    });
+    if (/\/api\/jobs\/[^/]+$/.test(u)) return json({ status: "done", progress: 100, stage: "Done", error: null, elapsed_s: 1.2, warnings: [] });
+    if (/\/api\/jobs\/[^/]+\/cut/.test(u)) return json({ cut_id: "cut1" });
+    if (/\/api\/cuts\/[^/]+$/.test(u)) return json({ status: "done", progress: 100, stage: "ready", quality: "1080p", files: FILES });
+    if (u.includes("/api/upload-transcript")) return json({ text: "00:00:01 - uploaded", chars: 20 });
     return json({ detail: "unhandled " + u }, 404);
   };
 }
 
-(async () => {
+async function runDirection(name) {
+  const html = fs.readFileSync(path.join(ROOT, "web", name + ".html"), "utf8");
+  const core = fs.readFileSync(path.join(ROOT, "web/core.js"), "utf8");
+  const view = fs.readFileSync(path.join(ROOT, "web", name + ".js"), "utf8");
+  const page = html.replace(/<script src="\/static\/[^"]+"><\/script>/g, "");
+
   const errors = [];
   const vc = new VirtualConsole();
   vc.on("jsdomError", (e) => errors.push("jsdomError: " + (e.stack || e.message)));
   vc.on("error", (...a) => errors.push("console.error: " + a.join(" ")));
 
-  const dom = new JSDOM(html, { runScripts: "outside-only", virtualConsole: vc, url: "http://localhost:8137/" });
+  const dom = new JSDOM(page, { runScripts: "outside-only", virtualConsole: vc, url: "http://localhost:8137/" });
   const { window } = dom;
-  const calls = [];
-  window.fetch = makeFetch(calls);
+  const state = { calls: [], failTranscript: false, failRun: false, noClips: false };
+  window.fetch = makeFetch(state);
   window.navigator.clipboard = { writeText: async () => {} };
-  window.elementFromPoint = () => null;
-
-  const app = fs.readFileSync(path.join(ROOT, "web/app.js"), "utf8");
-  try {
-    window.eval(app);
-  } catch (e) {
-    errors.push("eval: " + (e.stack || e.message));
-  }
+  window.isSecureContext = false;                        // exactly what a plain-http LAN origin gives you
+  window.document.execCommand = () => true;
+  window.URL.createObjectURL = () => "blob:stub";
+  window.URL.revokeObjectURL = () => {};
+  window.HTMLAnchorElement.prototype.click = function () {};   // no navigation in jsdom
+  window.eval(core);
+  window.eval(view);
   window.document.dispatchEvent(new window.Event("DOMContentLoaded"));
-  await new Promise((r) => setTimeout(r, 60));
 
-  const $ = (id) => window.document.getElementById(id);
-  const sel = (q) => window.document.querySelector(q);
-  const all = (q) => window.document.querySelectorAll(q);
+  const doc = window.document;
+  const role = (r, scope) => (scope || doc).querySelector(`[data-role="${r}"]`);
+  const roles = (r, scope) => Array.from((scope || doc).querySelectorAll(`[data-role="${r}"]`));
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const fire = (node, type) => node.dispatchEvent(new window.Event(type, { bubbles: true }));
+  const visible = (node) => Boolean(node) && !node.hidden && !node.closest("[hidden]");
   const checks = {};
+  const check = (label, ok) => { checks[label] = Boolean(ok); };
 
-  checks["landing visible"] = !$("landPane").hidden;
-  checks["build tag"] = $("buildTag").textContent.trim();
-  checks["clips min"] = $("numClips").min;
-  checks["clips max"] = $("numClips").max;
-  checks["length presets"] = all("#lenSeg button").length;
-  checks["default length"] = sel('#lenSeg button[aria-selected="true"]').dataset.len;
-  checks["clip badge auto"] = $("clipCountBadge").textContent.trim();
-  checks["side label"] = $("sideLabel").textContent.trim();
+  await wait(60);
 
-  // config: 7 clips + custom range
-  $("numClips").value = "7";
-  $("numClips").dispatchEvent(new window.Event("input"));
-  checks["clip badge manual"] = $("clipCountBadge").textContent.trim();
-  sel('#lenSeg button[data-len="custom"]').click();
-  checks["custom length shown"] = !$("customLen").hidden;
-  sel('#lenSeg button[data-len="40-50"]').click();
-  checks["custom length hidden"] = $("customLen").hidden;
+  /* 0 · contract: every requirement has a home in this direction */
+  const missing = REQUIRED.filter((r) => !role(r));
+  check("contract complete", missing.length === 0);
+  if (missing.length) checks["missing roles"] = missing.join(", ");
 
-  // out-of-range counts are clamped where the user can see it, not silently on the server
-  $("numClips").value = "3";
-  $("numClips").dispatchEvent(new window.Event("input"));
-  $("numClips").dispatchEvent(new window.Event("change"));
-  checks["clamped low"] = $("numClips").value + "|" + $("clipCountBadge").textContent.trim();
-  $("numClips").value = "99";
-  $("numClips").dispatchEvent(new window.Event("input"));
-  $("numClips").dispatchEvent(new window.Event("change"));
-  checks["clamped high"] = $("numClips").value + "|" + $("clipCountBadge").textContent.trim();
-  $("numClips").value = "7";
-  $("numClips").dispatchEvent(new window.Event("input"));
-  $("numClips").dispatchEvent(new window.Event("change"));
+  /* 1 · landing, config bounds, length presets */
+  check("landing visible", visible(role("pane-landing")));
+  check("build tag shows config version", (role("build-tag").textContent || "").includes("v0.1.0"));
+  check("clip bounds 5..15", role("clip-count").min === "5" && role("clip-count").max === "15");
+  check("four length presets", roles("len-option").length === 4);
+  check("default length 40-50", (roles("len-option").find((b) => b.getAttribute("aria-pressed") === "true") || {}).dataset?.len === "40-50");
+  check("badge AUTO", role("clip-badge").textContent.trim() === "AUTO");
 
-  // paste a link → details
-  $("ytUrl").value = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
-  $("ytUrl").dispatchEvent(new window.Event("input"));
-  await new Promise((r) => setTimeout(r, 900));
-  checks["details pane"] = !$("setupPane").hidden && $("landPane").hidden;
-  checks["fact title"] = $("factTitle").textContent.trim();
-  checks["fact length"] = $("factLength").textContent.trim();
-  checks["side label details"] = $("sideLabel").textContent.trim();
-  // the badge is a state, not the raw video id
-  checks["detail badge"] = $("detailBadge").textContent.trim();
-  checks["badge keeps id as tooltip"] = $("detailBadge").title;
-  checks["config hint"] = $("configHint").textContent.trim();
+  role("clip-count").value = "7";
+  fire(role("clip-count"), "input");
+  check("badge 7 clips", role("clip-badge").textContent.trim() === "7 clips");
+  roles("len-option").find((b) => b.dataset.len === "custom").click();
+  check("custom range shown", role("custom-len").hidden === false);
+  roles("len-option").find((b) => b.dataset.len === "40-50").click();
+  check("custom range hidden", role("custom-len").hidden === true);
 
-  // own transcript drawer
-  $("ownTranscript").click();
-  checks["own transcript open"] = !$("ownTranscriptBox").hidden;
-  $("ownTranscript").click();
-  checks["own transcript closed"] = $("ownTranscriptBox").hidden;
+  role("clip-count").value = "3"; fire(role("clip-count"), "change");
+  check("low count clamped", role("clip-count").value === "5");
+  role("clip-count").value = "99"; fire(role("clip-count"), "change");
+  check("high count clamped", role("clip-count").value === "15");
+  role("clip-count").value = "7"; fire(role("clip-count"), "change");
 
-  // extract → results → cut
-  $("runBtn").click();
-  await new Promise((r) => setTimeout(r, 120));
-  checks["credits under the bar"] = $("credits").parentElement === $("creditsSlot");
-  await new Promise((r) => setTimeout(r, 3100));
-  checks["clip rows"] = all("#clipList li").length;
-  checks["results visible"] = !$("resultsPane").hidden;
-  checks["asked"] = $("statRequested").textContent.trim();
-  checks["download links"] = all("#clipList a.btn").length;
-  checks["cut state"] = $("cutState").textContent.trim();
+  /* 2 · paste a link → details */
+  role("link-input").value = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+  fire(role("link-input"), "input");
+  await wait(900);
+  check("details visible", visible(role("pane-details")) && !visible(role("pane-landing")));
+  check("fact title", role("fact-title").textContent.trim() === "The Third Floor");
+  check("detail badge ready", role("detail-badge").textContent.trim() === "ready");
+  check("badge keeps video id as tooltip", (role("detail-badge").title || "").includes("dQw4w9WgXcQ"));
 
-  // More expands the packaging
-  sel("#clipList [data-more]").click();
-  await new Promise((r) => setTimeout(r, 30));
-  checks["more panel"] = all("#clipList .clip-more").length;
-  checks["packaging fields"] = all("#clipList .clip-more .dblock").length;
-  checks["thumbnail text"] = $("clipList").textContent.includes("HE PRESSED IT 💀");
+  /* 3 · own transcript drawer toggles */
+  role("own-toggle").click();
+  check("own transcript open", visible(role("own-box")));
+  role("own-toggle").click();
+  check("own transcript closed", !visible(role("own-box")));
 
-  // copy must work on an insecure origin: http://<lan-ip>:8137 has NO navigator.clipboard
-  const copyBtn = sel("#clipList .clip-more .copy");
-  checks["copy control"] = Boolean(copyBtn);
+  /* 4 · Details → plan (direction C keeps the plan on a second card) */
+  if (role("plan-next") && visible(role("plan-next"))) role("plan-next").click();
+
+  /* 5 · extract → working (credits move under the bar) → results */
+  role("run").click();
+  await wait(120);
+  check("credits under the bar", role("credits-slot").contains(role("credits")));
+  await wait(3300);
+  check("results visible", visible(role("pane-results")));
+  check("one clip row", roles("clip-item").length === 1);
+  check("asked for 7", role("stat-asked").textContent.trim() === "7");
+  check("download link per clip", roles("clip-download").length === 1);
+  check("cut finished", (role("cut-state").textContent || "").includes("1080p"));
+
+  /* 6 · packaging: More/Inspect shows every field, copy works without navigator.clipboard */
+  roles("clip-more")[0].click();
+  await wait(30);
+  const pack = roles("packaging")[0];
+  check("packaging shown", Boolean(pack));
+  check("packaging fields", roles("packaging")[0] ? pack.querySelectorAll("[data-field]").length >= 5 : false);
+  check("thumbnail text shown", (doc.body.textContent || "").includes("HE PRESSED IT 💀"));
+  const copyBtn = roles("copy-control")[0];
+  check("copy control present", Boolean(copyBtn));
   if (copyBtn) {
-    const saved = window.navigator.clipboard;
-    delete window.navigator.clipboard;   // exactly what a plain-http LAN origin gives you
     const before = errors.length;
     copyBtn.click();
-    await new Promise((r) => setTimeout(r, 40));
-    checks["copy fallback no crash"] = errors.length === before;
-    checks["copy fallback toast"] = ($("toasts").textContent || "").trim();
-    window.navigator.clipboard = saved;
+    await wait(40);
+    check("copy fallback no crash", errors.length === before);
+    check("copy fallback toast", (role("toasts").textContent || "").includes("Copied"));
   }
 
-  // every visible control must survive a click without throwing
+  /* 7 · theme toggles twice with no error */
   {
     const before = errors.length;
-    sel('#modeTabs button[data-mode="downloader"]').click();
-    sel('#modeTabs button[data-mode="cutter"]').click();
-    $("themeBtn").click();
-    $("themeBtn").click();
-    checks["theme toggle no crash"] = errors.length === before;
+    role("theme-toggle").click();
+    role("theme-toggle").click();
+    check("theme toggle no crash", errors.length === before);
   }
 
-  // ZIP toggle turns the row buttons into one archive button
-  $("zipToggle").checked = true;
-  $("zipToggle").dispatchEvent(new window.Event("change"));
-  await new Promise((r) => setTimeout(r, 30));
-  checks["zip button visible"] = !$("zipBtn").hidden;
-  checks["zip href"] = $("zipBtn").getAttribute("href");
-  checks["row downloads hidden"] = all("#clipList a.btn").length === 0;
-  $("zipToggle").checked = false;
-  $("zipToggle").dispatchEvent(new window.Event("change"));
+  /* 8 · ZIP toggle replaces per-clip downloads with one archive link */
+  role("zip-toggle").checked = true;
+  fire(role("zip-toggle"), "change");
+  await wait(30);
+  check("zip link visible", visible(role("zip-link")));
+  check("zip href", role("zip-link").getAttribute("href") === "/api/cuts/cut1/zip");
+  check("row downloads hidden in zip mode", roles("clip-download").length === 0);
+  role("zip-toggle").checked = false;
+  fire(role("zip-toggle"), "change");
+  await wait(20);
+  check("row downloads back", roles("clip-download").length === 1);
 
-  // caption failure must not dead-end: Details opens with the drawer ready
-  $("newRunBtn").click();
-  await new Promise((r) => setTimeout(r, 30));
-  failTranscript = true;
-  $("ytUrl").value = "https://www.youtube.com/watch?v=blocked0001";
-  $("ytUrl").dispatchEvent(new window.Event("input"));
-  await new Promise((r) => setTimeout(r, 900));
-  checks["failed fetch still opens details"] = !$("setupPane").hidden;
-  checks["failed fetch badge"] = $("detailBadge").textContent.trim();
-  checks["failed fetch drawer"] = !$("ownTranscriptBox").hidden;
-  checks["credits text"] = $("credits").textContent.replace(/\s+/g, " ").trim();
-  checks["credits bold names"] = [...$("credits").querySelectorAll("b")].map((b) => b.textContent.trim()).join("+");
-  failTranscript = false;
-  $("newRunBtn").click();
-  await new Promise((r) => setTimeout(r, 30));
+  /* 9 · mode tabs */
+  roles("mode").find((b) => b.dataset.mode === "downloader").click();
+  check("downloader pane", visible(role("pane-downloader")) && !visible(role("pane-cutter")));
+  roles("mode").find((b) => b.dataset.mode === "cutter").click();
+  check("back to cutter", visible(role("pane-cutter")) && !visible(role("pane-downloader")));
 
-  // a run that dies inside the server: readable title, retry, and a way to report it
-  failRun = true;
-  $("ytUrl").value = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
-  $("ytUrl").dispatchEvent(new window.Event("input"));
-  await new Promise((r) => setTimeout(r, 900));
-  $("runBtn").click();
-  await new Promise((r) => setTimeout(r, 1700));
-  checks["error pane"] = !$("errorPane").hidden;
-  checks["error title"] = $("errorPane").querySelector("h2")
-    ? $("errorPane").querySelector("h2").textContent.trim() : "";
-  checks["error buttons"] = [...$("errorPane").querySelectorAll("button")]
-    .map((b) => b.textContent.trim()).join(" / ");
-  checks["run button re-armed"] = $("runBtn").disabled === false;
-  checks["raw answer shown"] = Boolean($("errorPane").querySelector(".fail-raw"));
-  checks["raw answer text"] = $("errorPane").querySelector(".fail-raw")
-    ? $("errorPane").querySelector(".fail-raw").textContent : "";
-  failRun = false;
-  const retryBtn = [...$("errorPane").querySelectorAll("button")]
-    .find((b) => b.textContent.trim() === "Try again");
-  if (retryBtn) retryBtn.click();
-  await new Promise((r) => setTimeout(r, 3400));
-  checks["retry reaches results"] = !$("resultsPane").hidden;
-  $("newRunBtn").click();
-  await new Promise((r) => setTimeout(r, 30));
+  /* 10 · reset returns to landing, credits go home */
+  role("new-run").click();
+  await wait(30);
+  check("reset to landing", visible(role("pane-landing")) && !visible(role("pane-results")));
+  check("credits back in footer", role("credits-home").contains(role("credits")) && !role("credits-slot").contains(role("credits")));
 
-  // downloader tab
-  sel('#modeTabs button[data-mode="downloader"]').click();
-  checks["downloader pane"] = !$("downloaderPane").hidden && $("cutterPane").hidden;
-  sel('#modeTabs button[data-mode="cutter"]').click();
-  checks["back to cutter"] = !$("cutterPane").hidden && $("downloaderPane").hidden;
+  /* 11 · a fetch that finds no captions still opens Details with the drawer ready */
+  state.failTranscript = true;
+  role("link-input").value = "https://www.youtube.com/watch?v=blocked0001";
+  fire(role("link-input"), "input");
+  await wait(900);
+  check("failed fetch opens details", visible(role("pane-details")));
+  check("failed fetch badge", role("detail-badge").textContent.trim() === "no captions");
+  check("failed fetch drawer", visible(role("own-box")));
+  state.failTranscript = false;
+  role("new-run").click();
+  await wait(30);
 
-  // credits return to the footer, new link resets
-  $("newRunBtn").click();
-  await new Promise((r) => setTimeout(r, 30));
-  checks["credits in footer"] = $("credits").parentElement === window.document.body;
-  checks["back to landing"] = !$("landPane").hidden;
+  /* 12 · a run that dies inside the server: readable title, raw answer, retry works */
+  state.failRun = true;
+  role("link-input").value = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+  fire(role("link-input"), "input");
+  await wait(900);
+  if (role("plan-next") && visible(role("plan-next"))) role("plan-next").click();
+  role("run").click();
+  await wait(1700);
+  check("error pane", visible(role("pane-error")));
+  check("error title", role("error-title").textContent.trim() === "NexCut hit a bug");
+  check("error hint shown", visible(role("error-hint")) && role("error-hint").textContent.includes("nothing you did"));
+  check("raw answer shown", visible(role("error-raw")));
+  check("raw answer text", (role("error-raw").textContent || "").includes('"clips": 3'));
+  check("run re-armed", role("run").disabled === false);
+  state.failRun = false;
+  role("retry").click();
+  await wait(3400);
+  check("retry reaches results", visible(role("pane-results")));
+  role("new-run").click();
+  await wait(30);
 
-  console.log("── checks");
-  Object.entries(checks).forEach(([k, v]) => console.log(`   ${k.padEnd(22)} ${v}`));
+  /* 13 · a run that finds no clip says why, using the server's own reasons */
+  state.noClips = true;
+  role("link-input").value = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+  fire(role("link-input"), "input");
+  await wait(900);
+  if (role("plan-next") && visible(role("plan-next"))) role("plan-next").click();
+  role("run").click();
+  await wait(3400);
+  check("empty run shows results", visible(role("pane-results")));
+  check("empty run explains itself", (role("clip-list").textContent || "").includes("No clip passed the checks") && (role("clip-list").textContent || "").includes("8.0 quality gate"));
+  check("empty run has no clip rows", roles("clip-item").length === 0);
+  state.noClips = false;
+  role("new-run").click();
+  await wait(30);
 
-  const mustBeTrue = [
-    "landing visible", "details pane", "custom length shown", "custom length hidden",
-    "own transcript open", "own transcript closed", "results visible", "more panel",
-    "thumbnail text", "zip button visible", "row downloads hidden", "downloader pane",
-    "back to cutter", "credits in footer", "back to landing", "credits under the bar",
-    "failed fetch still opens details", "failed fetch drawer",
-    "copy control", "copy fallback no crash", "copy fallback toast", "theme toggle no crash",
-    "badge keeps id as tooltip", "error pane", "run button re-armed", "retry reaches results",
-    "raw answer shown",
-  ];
-  const mustBeNonZero = ["length presets", "clip rows", "download links", "packaging fields"];
-  const mustContain = {
-    "credits text": ["Proudly Created by", "Sheikh Arsalan", "in Collaboration with", "Mubashir"],
-    "config hint": ["1080p"],
-  };
-  const expected = { "failed fetch badge": "no captions", "clips min": "5", "clips max": "15", "default length": "40-50",
-    "clip badge auto": "AUTO", "clip badge manual": "7 clips", "asked": "7",
-    "detail badge": "ready",
-    "error title": "NexCut hit a bug",
-    "error buttons": "Try again / New link / Copy details",
-    "raw answer text": 'What the model returned{"sweep": {"longlist": 3}, "clips": 3}', "clamped low": "5|5 clips", "clamped high": "15|15 clips",
-    "credits bold names": "Sheikh Arsalan+Mubashir",
-    "zip href": "/api/cuts/cut1/zip" };
+  /* 14 · the credits line: both names bold, never clipped */
+  const credits = role("credits").textContent.replace(/\s+/g, " ").trim();
+  check("credits text", ["Proudly Created by", "Sheikh Arsalan", "in Collaboration with", "Mubashir"].every((w) => credits.includes(w)));
+  const bold = roles("credits")[0].querySelectorAll("b");
+  check("credits bold names", bold.length === 2 && bold[0].textContent.trim() === "Sheikh Arsalan" && bold[1].textContent.trim() === "Mubashir");
 
-  const fail = [];
-  mustBeTrue.forEach((k) => { if (!checks[k]) fail.push(`${k} = ${checks[k]}`); });
-  mustBeNonZero.forEach((k) => { if (!checks[k]) fail.push(`${k} = ${checks[k]}`); });
-  Object.entries(expected).forEach(([k, v]) => { if (String(checks[k]) !== v) fail.push(`${k} = ${checks[k]} (want ${v})`); });
-  Object.entries(mustContain).forEach(([k, words]) => {
-    words.forEach((w) => {
-      if (!String(checks[k] || "").includes(w)) fail.push(`${k} is missing "${w}" → ${checks[k]}`);
-    });
-  });
+  /* 15 · the stepper and stage label stay truthful where they exist */
+  const stepLis = doc.querySelectorAll(".steps li");
+  if (stepLis.length) check("stepper has five steps", stepLis.length === 5);
 
-  if (errors.length) {
-    console.log("\n── errors");
-    errors.forEach((e) => console.log("   " + e.split("\n")[0]));
+  const failed = Object.entries(checks).filter(([, v]) => v === false).map(([k]) => k);
+  const info = Object.entries(checks).filter(([, v]) => typeof v === "string").map(([k, v]) => `${k}: ${v}`);
+  return { name, checks, failed, info, errors };
+}
+
+(async () => {
+  const only = process.argv[2];
+  const targets = only ? [only] : DIRECTIONS;
+  let bad = 0;
+  for (const name of targets) {
+    const res = await runDirection(name);
+    const total = Object.keys(res.checks).length;
+    console.log(`── ${name}: ${total - res.failed.length}/${total} checks`);
+    res.info.forEach((line) => console.log("   " + line));
+    if (res.failed.length) {
+      res.failed.forEach((k) => console.log("   FAILED  " + k));
+      bad += res.failed.length;
+    }
+    if (res.errors.length) {
+      res.errors.forEach((e) => console.log("   ERROR   " + e.split("\n")[0]));
+      bad += res.errors.length;
+    }
   }
-  if (fail.length) {
-    console.log("\n── failed");
-    fail.forEach((f) => console.log("   " + f));
-    console.log("\nFAIL");
-    process.exit(1);
-  }
-  if (errors.length) { console.log("\nFAIL"); process.exit(1); }
-  console.log("\nOK");
+  console.log(bad ? `\nFAIL (${bad})` : "\nOK — all directions pass the same contract");
+  process.exitCode = bad ? 1 : 0;
 })();
