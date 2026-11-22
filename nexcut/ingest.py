@@ -264,7 +264,15 @@ def consolidate(lines: list[tuple[float, str]], *, target_words: int = 22) -> li
 
 
 def to_text(lines: list[tuple[float, str]]) -> str:
-    return "\n".join(f"{hms(sec)} - {body}" for sec, body in lines)
+    out: list[str] = []
+    prev_body = ""
+    for sec, body in lines:
+        clean = re.sub(r"\b(.{8,}?)\s+\1\b", r"\1", body).strip()
+        if not clean or clean == prev_body:
+            continue
+        prev_body = clean
+        out.append(f"{hms(sec)} - {clean}")
+    return "\n".join(out)
 
 
 # --------------------------------------------------------------------------
