@@ -1434,11 +1434,18 @@ kbd {
   text-align: center;
 }
 
-.dl-qual-wrap { display: grid; gap: 10px; }
+.dl-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+.dl-qual-wrap { display: grid; gap: 10px; width: 100%; }
 .dl-qual-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+  width: 100%;
 }
 @media (max-width: 520px) {
   .dl-qual-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1538,10 +1545,10 @@ kbd {
   pointer-events: none;
   padding: 12px 20px;
   border-radius: 12px;
-  background: rgba(185, 28, 28, 0.82);
-  border: 1px solid rgba(248, 113, 113, 0.55);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(185, 28, 28, 0.38);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   color: #fff;
   font-size: 13.5px;
   font-weight: 600;
