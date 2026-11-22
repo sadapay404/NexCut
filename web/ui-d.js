@@ -398,6 +398,49 @@
       if (m) m.hidden = true;
     },
 
+    "dl-qual": function (el) {
+      var q = el && el.getAttribute("data-quality");
+      if (!q) return;
+      var qInput = document.getElementById("d-dl-quality");
+      if (qInput) qInput.value = q;
+      document.querySelectorAll(".dl-qbtn").forEach(function (b) {
+        b.classList.toggle("is-active", b.getAttribute("data-quality") === q);
+      });
+      var est = document.getElementById("d-dl-est-size");
+      if (est) est.textContent = "Selected: " + q + " (MP4)";
+    },
+
+    "dl-more-open": function () {
+      var m = document.getElementById("d-dl-more-modal");
+      if (m) m.hidden = false;
+    },
+
+    "dl-more-close": function () {
+      var m = document.getElementById("d-dl-more-modal");
+      if (m) m.hidden = true;
+    },
+
+    "dl-qual-more": function (el) {
+      var q = el && el.getAttribute("data-quality");
+      if (!q) return;
+      var qInput = document.getElementById("d-dl-quality");
+      if (qInput) qInput.value = q;
+      document.querySelectorAll(".dl-qbtn").forEach(function (b) {
+        b.classList.toggle("is-active", b.id === "d-dl-more-btn" || b.getAttribute("data-quality") === q);
+      });
+      var est = document.getElementById("d-dl-est-size");
+      if (est) est.textContent = "Selected: " + q + " (MP4)";
+      var m = document.getElementById("d-dl-more-modal");
+      if (m) m.hidden = true;
+    },
+
+    "dl-cancel": function () {
+      var cancelBtn = document.getElementById("d-dl-cancel");
+      if (cancelBtn) cancelBtn.hidden = true;
+      var stage = document.querySelector('[data-role="dl-stage"]');
+      if (stage) stage.textContent = "Cancelled";
+    },
+
     "history": function () {
       var hp = R("history-panel");
       var cutter = R("pane-cutter");

@@ -174,6 +174,7 @@ def _command(private: Path) -> list[str]:
         raise DownloadError("yt-dlp is not installed on the NexCut server.", TOOL_HINT, 503)
     args = [*invocation, "--ignore-config", "--no-plugin-dirs", "--use-extractors", "youtube",
             "--no-playlist", "--no-continue", "--no-warnings", "--color", "never",
+            "--concurrent-fragments", "8", "--buffer-size", "16K",
             "--socket-timeout", "20", "--retries", "2", "--fragment-retries", "2",
             "--extractor-args", "youtube:player_client=android,web"]
     proxy = os.environ.get("NEXCUT_PROXY", "").strip()

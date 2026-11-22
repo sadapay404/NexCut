@@ -235,16 +235,23 @@
               </div>
             </div>
             <form class="dl-options" data-role="dl-start-form">
-              <label class="field" for="d-dl-format">
-                <span class="lbl">Format</span>
-                <select id="d-dl-format" data-role="dl-format" required></select>
-              </label>
-              <label class="field" for="d-dl-quality">
+              <input type="hidden" id="d-dl-format" data-role="dl-format" value="mp4">
+              <input type="hidden" id="d-dl-quality" data-role="dl-quality" value="1080p">
+              <div class="dl-qual-wrap">
                 <span class="lbl">Quality</span>
-                <select id="d-dl-quality" data-role="dl-quality" aria-describedby="d-dl-choice" required></select>
-              </label>
+                <div class="dl-qual-row" role="group" aria-label="Video quality">
+                  <button type="button" class="btn small dl-qbtn is-active" data-quality="1080p" data-action="dl-qual">1080p</button>
+                  <button type="button" class="btn small dl-qbtn" data-quality="720p" data-action="dl-qual">720p</button>
+                  <button type="button" class="btn small dl-qbtn" data-quality="480p" data-action="dl-qual">480p</button>
+                  <button type="button" class="btn small dl-qbtn" id="d-dl-more-btn" data-action="dl-more-open">More</button>
+                </div>
+              </div>
               <p class="hint dl-choice" id="d-dl-choice" data-role="dl-choice"></p>
-              <button class="btn primary" type="submit" data-role="dl-start"><span data-icon="download"></span>Prepare download</button>
+              <p class="meta" id="d-dl-est-size" data-role="dl-est-size"></p>
+              <div class="dl-act-row">
+                <button class="btn primary" type="submit" data-role="dl-start"><span data-icon="download"></span>Download</button>
+                <button class="btn small" type="button" id="d-dl-cancel" data-action="dl-cancel" hidden>Cancel</button>
+              </div>
             </form>
           </li>
         </ul>
@@ -277,6 +284,19 @@
     <p class="credits" data-role="credits"><span>Proudly Created by <button type="button" class="foot-link" id="d-credits-btn" data-action="credits-open"><b>Mubashir</b></button> <span class="join">in Collaboration with</span> <b>Sheikh Arsalan</b></span></p>
     <span class="build" data-role="build-tag"></span>
   </footer>
+</div>
+
+<div class="credits-backdrop" id="d-dl-more-modal" hidden>
+  <div class="credits-modal" role="dialog" aria-modal="true" aria-labelledby="d-dl-more-title">
+    <div class="credits-head">
+      <h3 id="d-dl-more-title">More Quality Options</h3>
+      <button type="button" class="btn small" id="d-dl-more-close" data-action="dl-more-close" aria-label="Close">Close</button>
+    </div>
+    <div class="dl-more-grid">
+      <button type="button" class="btn primary dl-qbtn" data-quality="1440p" data-action="dl-qual-more">1440p (2K)</button>
+      <button type="button" class="btn primary dl-qbtn" data-quality="2160p" data-action="dl-qual-more">2160p (4K)</button>
+    </div>
+  </div>
 </div>
 
 <div class="credits-backdrop" id="d-credits-modal" hidden>

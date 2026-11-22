@@ -1434,6 +1434,24 @@ kbd {
   text-align: center;
 }
 
+.dl-qual-wrap { display: grid; gap: 8px; }
+.dl-qual-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.dl-qbtn {
+  background: rgba(18, 25, 20, 0.9);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+}
+.dl-qbtn.is-active {
+  background: var(--accent);
+  color: #061008;
+  border-color: var(--accent);
+  font-weight: 700;
+}
+.dl-act-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dl-more-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+
 /* ── Downloader: uses the existing Field tokens, type and cards ── */
 .work[data-workspace="downloader"] [data-role="history-btn"],
 .work[data-workspace="downloader"] #d-home-btn { display: none; }
