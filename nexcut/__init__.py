@@ -5,4 +5,4 @@ and docs/phase-2-contract.md). No original source code was copied; only
 observable input/output contracts and UI-visible rules were used.
 """
 
-__version__ = "0.1.5"
+__version__ = "1.0"

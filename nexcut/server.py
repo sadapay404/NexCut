@@ -427,6 +427,56 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:  # noqa: BLE001
             return self._error(500, f"Server error: {exc}")
 
+    @staticmethod
+    def _build_clip_docx(clip: dict, idx: int) -> bytes:
+        from xml.sax.saxutils import escape as xml_escape
+        titles = clip.get("titles") or {}
+        rows = [
+            (f"Clip {idx:02d}", clip.get("hook_summary") or clip.get("title") or ""),
+            ("Duration", clip.get("duration_line") or f"{clip.get('start_stamp', '')} -> {clip.get('end_stamp', '')}"),
+            ("Clickbait Title", titles.get("clickbait", "")),
+            ("Search Title", titles.get("search", "")),
+            ("Debate Title", titles.get("debate", "")),
+            ("Video Title", clip.get("captions") or ""),
+            ("Upload Caption", clip.get("upload_caption") or ""),
+            ("Pinned Comment", clip.get("pinned_comment") or ""),
+            ("Hashtags", clip.get("hashtags") or ""),
+            ("Transcript", clip.get("transcript") or ""),
+        ]
+        paras = []
+        for label, val in rows:
+            if not str(val).strip():
+                continue
+            paras.append(
+                f'<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">{xml_escape(label)}: </w:t></w:r>'
+                f'<w:r><w:t xml:space="preserve">{xml_escape(str(val))}</w:t></w:r></w:p>'
+            )
+        doc_xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            f'<w:body>{"".join(paras)}<w:sectPr/></w:body></w:document>'
+        )
+        content_types = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-officedocument.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+            '</Types>'
+        )
+        rels = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+            '</Relationships>'
+        )
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("[Content_Types].xml", content_types)
+            zf.writestr("_rels/.rels", rels)
+            zf.writestr("word/document.xml", doc_xml)
+        return buf.getvalue()
+
     def _cut_zip(self, cut_id: str):
         cut_job = CUT_MANAGER.get(cut_id)
         if not cut_job:
@@ -434,13 +484,18 @@ class Handler(BaseHTTPRequestHandler):
         directory = CUT_MANAGER.directory(cut_id).resolve()
         if not directory.is_dir():
             return self._error(404, "That cut is gone")
+        mp4s = sorted(p for p in directory.iterdir() if p.is_file() and p.suffix.lower() == ".mp4")
+        clips = getattr(cut_job, "clips", None) or []
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as bundle:
-            for item in sorted(directory.iterdir()):
-                if item.is_file() and item.name != "clips.zip":
-                    bundle.write(item, arcname=item.name)
+            for idx, item in enumerate(mp4s, start=1):
+                folder = f"Clip {idx:02d}"
+                bundle.write(item, arcname=f"{folder}/Clip{idx:02d}.mp4")
+                clip_meta = clips[idx - 1] if idx - 1 < len(clips) else {}
+                bundle.writestr(f"{folder}/Details.docx", self._build_clip_docx(clip_meta, idx))
         data = buffer.getvalue()
-        name = f'nexcut-{cut_id}.zip'
+        from datetime import datetime
+        name = f"NexCut_{datetime.now().strftime('%d-%m-%Y')}.zip"
         return self._send(200, data, "application/zip",
                           {"Content-Disposition": f'attachment; filename="{name}"'})
 

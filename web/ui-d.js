@@ -205,6 +205,8 @@
     },
 
     renderDetails: function (details, err) {
+      var hb = document.getElementById("d-home-btn");
+      if (hb && (details || err)) hb.hidden = false;
       var f = details ? N.factsOf(details) : err ? N.factsFailed(err) : N.factsEmpty();
       N.put("fact-title", f.title);
       N.put("fact-channel", f.channel);
@@ -305,11 +307,17 @@
       if (c.clips && c.clips.length) {
         try {
           var hist = JSON.parse(localStorage.getItem("saa_history_d") || "[]");
-          var chEl = R("res-meta");
-          var channel = chEl ? (chEl.textContent || "").trim() : "";
+          var tEl = R("fact-title");
+          var chEl = R("fact-channel");
+          var vTitle = (tEl && tEl.textContent && tEl.textContent.trim() !== "—") ? tEl.textContent.trim() : (c.title || "Untitled video");
+          var channel = (chEl && chEl.textContent && chEl.textContent.trim() !== "—") ? chEl.textContent.trim() : "YouTube";
           var now = new Date();
-          var cutAt = now.toLocaleDateString() + " " + now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-          var entry = { title: c.title || "Untitled", channel: channel || "YouTube", cutAt: cutAt, clips: c.clips };
+          var dd = String(now.getDate()).padStart(2, "0");
+          var mm = String(now.getMonth() + 1).padStart(2, "0");
+          var yyyy = now.getFullYear();
+          var dateStr = dd + "-" + mm + "-" + yyyy;
+          var timeStr = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
+          var entry = { title: vTitle, channel: channel, dateStr: dateStr, timeStr: timeStr, clips: c.clips };
           if (!hist.length || hist[0].title !== entry.title || hist[0].clips.length !== entry.clips.length) {
             hist.unshift(entry);
             localStorage.setItem("saa_history_d", JSON.stringify(hist.slice(0, 20)));
@@ -356,7 +364,9 @@
       });
     },
     "home": function () {
-      N.go("landing");
+      var hb = document.getElementById("d-home-btn");
+      if (hb) hb.hidden = true;
+      view.showPane("landing");
     },
 
     "credits-open": function () {
@@ -388,10 +398,15 @@
           var btn = N.el("button", "history-item");
           btn.type = "button";
           btn.appendChild(N.el("div", "history-title", it.title || "Untitled video"));
-          btn.appendChild(N.el("div", "history-meta", (it.channel || "Unknown channel") + " · Cut " + (it.cutAt || "") + " · " + (it.clips ? it.clips.length : 0) + " clips"));
+          btn.appendChild(N.el("div", "history-meta", it.channel || "YouTube"));
+          btn.appendChild(N.el("div", "history-meta", "Date: " + (it.dateStr || "—")));
+          btn.appendChild(N.el("div", "history-meta", "Time: " + (it.timeStr || "—")));
+          btn.appendChild(N.el("div", "history-meta", "Clips Cut: " + (it.clips ? it.clips.length : 0) + " Clips"));
           btn.addEventListener("click", function () {
             hp.hidden = true;
             cutter.hidden = false;
+            var hb = document.getElementById("d-home-btn");
+            if (hb) hb.hidden = false;
             view.showPane("results");
             view.setResults({
               title: it.title || "History session",
