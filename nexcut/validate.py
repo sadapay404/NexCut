@@ -119,12 +119,7 @@ def check_clip(
     if len(opening.split()) < 4:
         return f"opening beat too thin to hook a stranger ('{clip.start_sentence}')"
 
-    # 5. "8.0 QUALITY GATE"
-    avg = clip.scores.avg
-    if avg is None:
-        return "no usable scores - the 8.0 gate cannot be evaluated"
-    if avg < gate:
-        return f"average score {avg:.1f} is below the {gate:.1f} quality gate"
+    # 5. Quality gate disabled — keep all clips the AI provides regardless of score.
 
     # 6. safety
     blob = f"{clip.safety} {clip.verbal_hook} {clip.upload_caption}".lower()

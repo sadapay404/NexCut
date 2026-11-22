@@ -275,8 +275,9 @@
     renderResults: function (model) {
       if (model.runId !== runSeen) { runSeen = model.runId; open = {}; }
       lastModel = model;
-      N.put("res-title", model.ready ? model.title : "—");
-      N.put("res-meta", model.meta.join("   ·   "));
+      var count = (model.clips || []).length;
+      N.put("res-title", model.ready ? (count + " CLIPS FOUND") : "—");
+      N.put("res-meta", model.ready ? "Using Claude. By NexCut" : "");
       N.put("stat-found", model.stats.found);
       N.put("stat-kept", model.stats.kept);
       N.put("stat-rejected", model.stats.rejected);
