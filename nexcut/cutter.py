@@ -159,8 +159,11 @@ def download(video_id: str, height: int) -> Path:
         return target
 
     fmt = f"bv*[height<={height}]+ba/b[height<={height}]/b"
+    for part in CACHE.glob(f"{video_id}_{height}*.part"):
+        part.unlink(missing_ok=True)
     proc = _run([
-        *ytdlp, "--no-playlist", "--no-warnings", "--no-progress", *cookies_arg(),
+        *ytdlp, "--no-playlist", "--no-warnings", "--no-progress", "--no-continue",
+        *cookies_arg(),
         "-f", fmt, "--merge-output-format", "mp4",
         "-o", str(target), f"https://www.youtube.com/watch?v={video_id}",
     ])
