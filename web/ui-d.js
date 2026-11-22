@@ -885,6 +885,59 @@
       syncMark();
     }
 
+    var dlCard = document.querySelector(".dl-card");
+    if (dlCard) {
+      dlCard.addEventListener("mousemove", function (e) {
+        var r = dlCard.getBoundingClientRect();
+        var x = (e.clientX - r.left) / r.width - 0.5;
+        var y = (e.clientY - r.top) / r.height - 0.5;
+        dlCard.style.transform = "perspective(900px) rotateX(" + (-y * 6).toFixed(2) + "deg) rotateY(" + (x * 6).toFixed(2) + "deg)";
+      });
+      dlCard.addEventListener("mouseleave", function () {
+        dlCard.style.transform = "";
+      });
+    }
+
+    var trimList = document.getElementById("d-dl-trim-list");
+    if (trimList) {
+      var getMaxSec = function () {
+        var meta = document.querySelector('[data-role="dl-meta"]');
+        var m = meta && meta.textContent ? meta.textContent.match(/(\d+):(\d{2}):(\d{2})/) : null;
+        if (m) return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+        var m2 = meta && meta.textContent ? meta.textContent.match(/(\d+):(\d{2})/) : null;
+        return m2 ? Number(m2[1]) * 60 + Number(m2[2]) : 0;
+      };
+      trimList.addEventListener("input", function (e) {
+        var inp = e.target;
+        if (!inp || !inp.classList.contains("dl-trim-in")) return;
+        var maxSec = getMaxSec();
+        var isHour = maxSec >= 3600;
+        var maxDigits = isHour ? 5 : 4;
+        var digits = inp.value.replace(/\D/g, "").slice(0, maxDigits);
+        var formatted = digits;
+        if (isHour) {
+          if (digits.length > 3) formatted = digits.slice(0, 1) + ":" + digits.slice(1, 3) + ":" + digits.slice(3);
+          else if (digits.length > 1) formatted = digits.slice(0, 1) + ":" + digits.slice(1);
+        } else {
+          if (digits.length > 2) formatted = digits.slice(0, 2) + ":" + digits.slice(2);
+        }
+        inp.value = formatted;
+        if (maxSec > 0 && digits.length === maxDigits) {
+          var parts = formatted.split(":").map(Number);
+          var sec = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+          if (sec > maxSec) {
+            var t = document.getElementById("d-dl-toast");
+            if (t) {
+              t.textContent = "Time cannot exceed video duration.";
+              t.classList.add("is-open");
+              clearTimeout(t._timer);
+              t._timer = setTimeout(function () { t.classList.remove("is-open"); }, 3000);
+            }
+          }
+        }
+      });
+    }
+
     var manualBox = document.getElementById("d-manual-box");
     var manualBtn = document.getElementById("d-manual-submit");
     var manualTxt = document.getElementById("d-manual-json");
