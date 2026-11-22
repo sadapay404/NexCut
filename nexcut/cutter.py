@@ -167,9 +167,9 @@ def download(video_id: str, height: int) -> Path:
     if proc.returncode != 0 or not target.is_file():
         tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
         raise CutterError(
-            "The source video could not be downloaded.",
-            f"{tail[0][:200]} — if YouTube asks for a sign-in, export cookies.txt from a browser "
-            "and drop it in the repo root (or set NEXCUT_COOKIES).",
+            f"The source video could not be downloaded ({tail[0][:160]}).",
+            "If YouTube asks for a sign-in, export cookies.txt from a browser "
+            "and drop it in the repo root (or set NEXCUT_COOKIES). Otherwise run: pip install -U yt-dlp",
         )
     return target
 
