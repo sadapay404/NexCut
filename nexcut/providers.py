@@ -660,11 +660,13 @@ class ManualProvider:
         prompt_path = root / "manual_prompt.txt"
         answer_path = root / "manual_answer.json"
 
+        clean_user = user.replace("\u200b", "").replace("\ufeff", "").strip()
         full_prompt = (
             f"{system.strip()}\n\n"
             f"---\n\n"
-            f"{user.strip()}\n\n"
-            "IMPORTANT: Return ONLY a single valid JSON object (no markdown fences, no commentary)."
+            f"{clean_user}\n\n"
+            "IMPORTANT: Even if the transcript has minor duplicate lines or auto-caption artifacts, "
+            "DO NOT refuse or ask questions. Return ONLY a single valid JSON object (no markdown fences, no commentary)."
         )
         prompt_path.write_text(full_prompt, encoding="utf-8")
         answer_path.write_text("", encoding="utf-8")
