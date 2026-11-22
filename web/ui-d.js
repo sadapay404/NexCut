@@ -1,5 +1,5 @@
 /* NexCut — direction D, "Field".
-   Layout and interaction only. Flow, state and the API live in core.js. */
+   Cutter flow lives in core.js; the Downloader pane has its own state. */
 (function () {
   "use strict";
   var N = window.NexCut;
@@ -19,6 +19,10 @@
   var minClips = 5;
   var maxClips = 15;
   var inited = false;
+  var workspace = "cutter";
+  var cutterStage = "landing";
+  var cutterHistoryOpen = false;
+  var downloader = null;
 
   function pad2(n) {
     return String(n).padStart(2, "0");
@@ -48,13 +52,22 @@
   }
 
   function setMode(mode) {
-    R("pane-cutter").hidden = mode !== "cutter";
-    R("pane-downloader").hidden = mode !== "downloader";
+    if (mode === workspace || !["cutter", "downloader"].includes(mode)) return;
+    var isDownloader = mode === "downloader";
+    var history = R("history-panel");
+    if (isDownloader) cutterHistoryOpen = !history.hidden;
+    workspace = mode;
+    document.querySelector(".work").dataset.workspace = mode;
+    history.hidden = isDownloader || !cutterHistoryOpen;
+    R("pane-cutter").hidden = isDownloader || cutterHistoryOpen;
+    R("pane-downloader").hidden = !isDownloader;
     RS("mode").forEach(function (b) {
       b.setAttribute("aria-selected", b.getAttribute("data-mode") === mode ? "true" : "false");
     });
     var side = document.querySelector(".rail-side");
-    if (side) side.textContent = mode === "downloader" ? "Side B" : "Side A";
+    if (side) side.textContent = isDownloader ? "Side B" : "Side A";
+    N.put("stage-label", isDownloader ? "Downloader" : RAIL[cutterStage]);
+    moveCredits(!isDownloader && cutterStage === "working");
   }
 
   /* the packaging block, same shape as the other directions */
@@ -186,6 +199,7 @@
       n.min = String(minClips);
       n.max = String(maxClips);
       N.put("build-tag", cfg.version || "");
+      downloader.setConfig(cfg);
       updateBadge();
     },
 
@@ -200,8 +214,11 @@
         var pane = R("pane-" + s);
         if (pane) pane.hidden = s !== name;
       });
-      N.put("stage-label", RAIL[name] || "");
-      moveCredits(name === "working");
+      cutterStage = name;
+      if (workspace === "cutter") {
+        N.put("stage-label", RAIL[name] || "");
+        moveCredits(name === "working");
+      }
     },
 
     renderDetails: function (details, err) {
@@ -471,13 +488,276 @@
     });
 
     R("zip-toggle").addEventListener("change", function (e) { app.setZip(e.target.checked); });
-    N.bindDrop(function (file) { app.uploadFile(file); });
+    N.bindDrop(function (file) { if (workspace === "cutter") app.uploadFile(file); });
 
     document.addEventListener("keydown", function (e) {
-      if (e.key !== "Escape") return;
+      if (workspace !== "cutter" || e.key !== "Escape") return;
       if (!R("own-box").hidden) view.openOwnTranscript(false);
       if (Object.keys(open).some(function (k) { return open[k]; })) { open = {}; renderList(); }
     });
+  }
+
+  /* Downloader state is independent of the Cutter's shared app. */
+  function wireDownloader() {
+    var pane = R("pane-downloader");
+    var dl = function (key) { return N.role(key, pane); };
+    var put = function (key, text) { N.put(key, text, pane); };
+    var labels = { mp4: "MP4 · Video + audio", webm: "WebM · Video + audio", mp3: "MP3 · Audio only" };
+    var link = dl("dl-link"), format = dl("dl-format"), quality = dl("dl-quality");
+    var invite = dl("dl-invite"), cover = dl("dl-thumbnail"), save = dl("dl-file");
+    var info = null, jobId = "", busy = false, failures = 0;
+
+    function notice(text, tone, hint) {
+      put("dl-source", text);
+      dl("dl-source").dataset.tone = tone || "";
+      put("dl-hint", hint || "");
+      dl("dl-hint").hidden = !hint;
+    }
+
+    function sync() {
+      var locked = busy || !!jobId;
+      link.disabled = dl("dl-inspect").disabled = locked;
+      format.disabled = quality.disabled = locked;
+      dl("dl-start").disabled = locked || !info || !quality.value;
+      invite.disabled = busy;
+      pane.classList.toggle("is-engaged", !dl("dl-details").hidden || !dl("dl-transfer").hidden);
+    }
+
+    function reset() {
+      info = null;
+      dl("dl-details").hidden = dl("dl-transfer").hidden = dl("dl-ready").hidden = true;
+      save.removeAttribute("href");
+      cover.hidden = true;
+      cover.removeAttribute("src");
+      sync();
+    }
+
+    function checkInvite() {
+      if (dl("dl-invite-field").hidden || invite.value.trim()) return true;
+      notice("Enter the studio invite code to continue.", "warn");
+      invite.focus();
+      return false;
+    }
+
+    async function request(path, body) {
+      var headers = { Accept: "application/json" };
+      if (!dl("dl-invite-field").hidden && invite.value.trim()) headers["X-Invite-Code"] = invite.value.trim();
+      var ctl = new AbortController();
+      var options = { headers: headers, cache: "no-store", signal: ctl.signal };
+      if (body) {
+        headers["Content-Type"] = "application/json";
+        options.method = "POST";
+        options.body = JSON.stringify(body);
+      }
+      var timer = setTimeout(function () { ctl.abort(); }, path === "/api/dl/info" ? 85000 : 12000);
+      try {
+        var response = await fetch(path, options);
+        var data = await response.json().catch(function () { return {}; });
+        if (!response.ok) {
+          var error = new Error(data.detail || "The downloader returned HTTP " + response.status + ".");
+          error.hint = data.hint;
+          error.status = response.status;
+          if (response.status === 403) dl("dl-invite-field").hidden = false;
+          throw error;
+        }
+        return data;
+      } catch (error) {
+        if (error.status) throw error;
+        throw new Error(error.name === "AbortError" ? "The downloader request timed out." : "Could not reach the NexCut downloader.");
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    function selected() {
+      return info && info.formats.find(function (item) { return item.id === quality.value; });
+    }
+
+    function size(n) {
+      if (n >= 1024 * 1024 * 1024) return (n / (1024 * 1024 * 1024)).toFixed(2) + " GiB";
+      if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + " MiB";
+      if (n >= 1024) return (n / 1024).toFixed(1) + " KiB";
+      return Math.round(n) + " B";
+    }
+
+    function option(select, value, text) {
+      var node = N.el("option", null, text);
+      node.value = value;
+      select.appendChild(node);
+    }
+
+    function qualityHint() {
+      var choice = selected();
+      put("dl-choice", choice && choice.separate_tracks ? "Video and audio arrive separately and are joined into one file."
+        : format.value === "mp3" ? "The best available source audio is converted to MP3." : "Saves the original resolution with audio.");
+      sync();
+    }
+
+    function qualities() {
+      quality.textContent = "";
+      var choices = info.formats.filter(function (item) { return item.format === format.value; });
+      choices.forEach(function (item) { option(quality, item.id, item.label); });
+      var fullHD = choices.find(function (item) { return item.quality === 1080; });
+      if (fullHD) quality.value = fullHD.id;
+      qualityHint();
+    }
+
+    function stage(text) {
+      if (dl("dl-stage").textContent !== text) put("dl-stage", text);
+    }
+
+    function renderTransfer(job, choice) {
+      var pct = Number.isFinite(job.progress) ? Math.max(0, Math.min(100, job.progress)) : null;
+      var bar = dl("dl-progress");
+      var stats = [];
+      dl("dl-transfer").hidden = false;
+      dl("dl-pulse").hidden = job.status === "ready" || job.status === "error";
+      bar.querySelector("i").style.transform = "scaleX(" + (pct === null ? 0 : pct / 100) + ")";
+      if (pct === null) bar.removeAttribute("aria-valuenow");
+      else bar.setAttribute("aria-valuenow", String(pct));
+      put("dl-percent", pct === null ? "—" : pct + "%");
+      var headline = { queued: "Queued…", downloading: "Downloading media…", processing: "Preparing your file…",
+        ready: "Download ready", error: "Download failed" };
+      stage(headline[job.status] || "Checking download…");
+      if (job.status === "downloading") {
+        if (choice && choice.separate_tracks && pct !== null) stats.push("Current track");
+        if (Number.isFinite(job.speed) && job.speed > 0) stats.push(size(job.speed) + "/s");
+        if (Number.isFinite(job.eta)) stats.push("ETA " + N.hms(job.eta));
+      }
+      put("dl-stats", stats.join(" · "));
+      dl("dl-stats").hidden = !stats.length;
+      sync();
+    }
+
+    function stop(message, hint) {
+      jobId = "";
+      dl("dl-check").hidden = dl("dl-pulse").hidden = true;
+      if (message) notice(message, "bad", hint);
+      sync();
+    }
+
+    async function poll(id) {
+      try {
+        var job = await request("/api/dl/status/" + id);
+        if (jobId !== id) return;
+        if (!["queued", "downloading", "processing", "ready", "error"].includes(job.status)) {
+          throw new Error("NexCut did not return a download status.");
+        }
+        failures = 0;
+        renderTransfer(job, selected());
+        if (job.status === "ready") {
+          var file = job.file;
+          // Only attach an API download link to this job, never a remote URL.
+          var filePath = new RegExp("^/api/dl/file/" + id + "\\?token=[0-9a-f]{32}$");
+          if (!file || typeof file.url !== "string" || !filePath.test(file.url)) {
+            stage("File link unavailable");
+            stop("The server did not return a valid download link.");
+            return;
+          }
+          save.href = file.url;
+          save.download = file.name;
+          put("dl-filename", file.name);
+          put("dl-size", size(file.size));
+          put("dl-file-label", "Save " + format.value.toUpperCase());
+          dl("dl-ready").hidden = false;
+          notice("The file is ready. Use Save to download it to this device.", "ok");
+          stop();
+        } else if (job.status === "error") {
+          stop(job.detail || "The download could not be completed.", job.hint);
+        } else {
+          setTimeout(function () { poll(id); }, 800);
+        }
+      } catch (error) {
+        if (jobId !== id) return;
+        if (error.status === 404) {
+          stage("Download no longer available");
+          stop(error.message, error.hint);
+        } else if (error.status !== 403 && ++failures < 3) {
+          stage("Reconnecting…");
+          setTimeout(function () { poll(id); }, 1200);
+        } else {
+          stage("Status unavailable");
+          dl("dl-pulse").hidden = true;
+          dl("dl-check").hidden = false;
+          notice(error.message, "warn", "The job may still be running. Check its status again.");
+        }
+      }
+    }
+
+    link.addEventListener("input", function () {
+      reset();
+      notice("Watch, share and Shorts links · One video at a time");
+    });
+    cover.addEventListener("error", function () { cover.hidden = true; });
+    format.addEventListener("change", qualities);
+    quality.addEventListener("change", qualityHint);
+
+    dl("dl-inspect-form").addEventListener("submit", async function (event) {
+      event.preventDefault();
+      if (busy || jobId || !checkInvite()) return;
+      reset();
+      busy = true;
+      sync();
+      notice("Reading available formats…");
+      try {
+        var data = await request("/api/dl/info", { url: link.value.trim() });
+        if (!data.inspection_id || !Array.isArray(data.formats) || !data.formats.length) {
+          throw new Error("The source has no compatible formats.");
+        }
+        info = data;
+        put("dl-title", data.title);
+        put("dl-meta", [data.channel, Number.isFinite(data.duration) ? N.hms(data.duration) : ""].filter(Boolean).join(" · "));
+        if (data.thumbnail) { cover.src = data.thumbnail; cover.hidden = false; }
+        format.textContent = "";
+        Object.keys(labels).forEach(function (key) {
+          if (info.formats.some(function (item) { return item.format === key; })) option(format, key, labels[key]);
+        });
+        dl("dl-details").hidden = false;
+        qualities();
+        notice("Choose a format and quality.", "ok");
+      } catch (error) {
+        notice(error.message, "bad", error.hint);
+      } finally {
+        busy = false;
+        sync();
+      }
+    });
+
+    dl("dl-start-form").addEventListener("submit", async function (event) {
+      event.preventDefault();
+      var choice = selected();
+      if (busy || jobId || !choice || !checkInvite()) return;
+      busy = true;
+      dl("dl-ready").hidden = true;
+      save.removeAttribute("href");
+      notice("Starting download…");
+      renderTransfer({ status: "queued", progress: null });
+      try {
+        var job = await request("/api/dl/start", { inspection_id: info.inspection_id, format_id: choice.id });
+        if (!/^[0-9a-f]{32}$/.test(job.job_id)) throw new Error("NexCut did not return a download job.");
+        jobId = job.job_id;
+        failures = 0;
+        notice("NexCut is preparing your file.");
+        poll(jobId);
+      } catch (error) {
+        dl("dl-transfer").hidden = true;
+        if (error.status === 410) reset();
+        notice(error.message, "bad", error.hint);
+      } finally {
+        busy = false;
+        sync();
+      }
+    });
+
+    dl("dl-check").addEventListener("click", function () {
+      if (!jobId || !checkInvite()) return;
+      this.hidden = true;
+      failures = 0;
+      notice("Checking the download…");
+      poll(jobId);
+    });
+    sync();
+    return { setConfig: function (cfg) { dl("dl-invite-field").hidden = !cfg.requires_invite; } };
   }
 
   function init() {
@@ -487,6 +767,7 @@
     N.bindActions(actions);
     syncTheme();
     wireInputs();
+    downloader = wireDownloader();
     app = N.createApp(view);
     app.boot();
 

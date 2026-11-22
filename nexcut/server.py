@@ -10,6 +10,8 @@ Env:
   NEXCUT_BACKUP_KEY     backup Gemini key used when a member key is exhausted
   NEXCUT_MODEL_MAP      JSON alias -> real model id
   NEXCUT_PORT           default 8137
+  NEXCUT_PROXY          optional yt-dlp proxy for the Downloader
+  NEXCUT_COOKIES        optional Netscape cookie file for YouTube
 """
 
 from __future__ import annotations
@@ -19,16 +21,18 @@ import json
 import mimetypes
 import os
 import re
+import shutil
 import time
 import traceback
 import zipfile
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 from . import __version__
 from .cutter import CutterError, MIN_HEIGHT, probe_heights, tool_status
+from .downloader import DownloadError, DownloadManager
 from .report import run_markdown
 from .schema import DEFAULT_WINDOW, MAX_CLIPS, MIN_CLIPS
 from .cuts import CutManager
@@ -122,6 +126,7 @@ def _provider_factory(api_key: str):
 
 MANAGER = JobManager(_provider_factory)
 CUT_MANAGER = CutManager()
+DL_MANAGER = DownloadManager()
 
 
 def _default_model() -> str:
@@ -250,10 +255,95 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args) -> None:  # quieter, single line
         print(f"[nexcut] {self.address_string()} {fmt % args}")
 
+    def log_request(self, code="-", size="-") -> None:
+        # The file URL carries a short-lived bearer token, not an invite code.
+        if self.path.startswith("/api/dl/"):
+            self.log_message('"%s /api/dl/…" %s %s', self.command, str(code), str(size))
+        else:
+            super().log_request(code, size)
+
+    # -- downloader --------------------------------------------------------
+    def _dl_authorised(self) -> bool:
+        codes = _invite_codes()
+        supplied = self.headers.get("X-Invite-Code", "").strip().upper()
+        return not codes or supplied in codes
+
+    def _dl_post(self, path: str) -> None:
+        if path not in ("/api/dl/info", "/api/dl/start") or not self._dl_authorised():
+            self.close_connection = True  # the body has not been read
+            if path not in ("/api/dl/info", "/api/dl/start"):
+                return self._error(404, "Unknown downloader endpoint")
+            return self._error(403, "A valid invite code is required")
+        if (self.headers.get_content_type() != "application/json"
+                or self.headers.get("Transfer-Encoding")):
+            self.close_connection = True
+            return self._error(415, "Send application/json with a Content-Length")
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+            if not 0 < length <= 8192:
+                raise ValueError
+        except ValueError:
+            self.close_connection = True
+            return self._error(400, "Invalid downloader request size")
+        timeout = self.connection.gettimeout()
+        try:
+            self.connection.settimeout(10)
+            body = self._json_body()
+        except ValueError as exc:
+            return self._error(400, str(exc))
+        except TimeoutError:
+            self.close_connection = True
+            return self._error(408, "Timed out while reading the request")
+        finally:
+            self.connection.settimeout(timeout)
+        try:
+            if path == "/api/dl/info":
+                return self._json(200, DL_MANAGER.inspect(body.get("url")))
+            return self._json(202, DL_MANAGER.start(body.get("inspection_id"), body.get("format_id")))
+        except DownloadError as exc:
+            return self._json(exc.status, {"detail": str(exc), "hint": exc.hint})
+        except Exception:  # native tool or filesystem errors must not disclose server configuration
+            return self._error(500, "NexCut could not handle this downloader request")
+
+    def _dl_get(self, path: str) -> None:
+        match = re.fullmatch(r"/api/dl/(status|file)/([0-9a-f]{32})", path)
+        if not match:
+            return self._error(404, "Unknown downloader endpoint")
+        kind, job_id = match.groups()
+        authorised = self._dl_authorised()
+        try:
+            if kind == "status":
+                if not authorised:
+                    return self._error(403, "A valid invite code is required")
+                return self._json(200, DL_MANAGER.status(job_id))
+            token = parse_qs(urlparse(self.path).query).get("token", [""])[0]
+            stream, name, mime, size = DL_MANAGER.open_file(job_id, authorised=authorised, token=token)
+        except DownloadError as exc:
+            return self._json(exc.status, {"detail": str(exc), "hint": exc.hint})
+        except Exception:
+            return self._error(500, "NexCut could not open this download")
+        with stream:
+            try:
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", mime)
+                self.send_header("Content-Length", str(size))
+                self.send_header("Content-Disposition", f"attachment; filename=\"NexCut.{name.rsplit('.', 1)[-1]}\"; "
+                                 f"filename*=UTF-8''{quote(name, safe='')}")
+                self.send_header("Cache-Control", "private, no-store")
+                self.send_header("Referrer-Policy", "no-referrer")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                if self.command != "HEAD":
+                    shutil.copyfileobj(stream, self.wfile, length=128 * 1024)
+            except OSError:
+                self.close_connection = True  # client left or the stream was interrupted
+
     # -- routing -----------------------------------------------------------
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         try:
+            if path.startswith("/api/dl/"):
+                return self._dl_get(path)
             if path == "/api/config":
                 return self._json(200, config_payload())
             if path == "/api/tools":
@@ -324,6 +414,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         try:
+            if path.startswith("/api/dl/"):
+                return self._dl_post(path)
             if path == "/api/extract":
                 if not self._authorised():
                     return self._error(403, "Invite code required")

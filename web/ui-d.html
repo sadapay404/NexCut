@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#0b2b1d">
 <title>Sheikh Arsalan Automation — NexCut</title>
-<link rel="stylesheet" href="/static/ui-d.css?v=16">
+<link rel="stylesheet" href="/static/ui-d.css?v=17">
 <script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('saa_theme')==='dark'?'dark':'light')}catch(e){}</script>
 </head>
 <body>
@@ -27,7 +27,7 @@
 
     <nav class="modes" role="tablist" aria-label="Workspace">
       <button class="mode-btn" type="button" role="tab" data-role="mode" data-mode="cutter" data-action="mode" aria-selected="true"><span class="dot" aria-hidden="true"></span>Cutter</button>
-      <button class="mode-btn" type="button" role="tab" data-role="mode" data-mode="downloader" data-action="mode" aria-selected="false"><span class="dot" aria-hidden="true"></span>Downloader<span class="soon">soon</span></button>
+      <button class="mode-btn" type="button" role="tab" data-role="mode" data-mode="downloader" data-action="mode" id="d-dl-tab" aria-controls="d-downloader" aria-selected="false"><span class="dot" aria-hidden="true"></span>Downloader</button>
     </nav>
 
     <div class="panel-spacer" aria-hidden="true">
@@ -206,11 +206,69 @@
         </section>
       </div>
 
-      <!-- downloader: placeholder, deliberately quiet -->
-      <section class="pane" data-role="pane-downloader" hidden>
-        <p class="eyebrow">Downloader</p>
-        <h2 class="h2">Not built yet.</h2>
-        <p class="sub">The cutter is the only working tool for now. Full-video downloads will appear here.</p>
+      <section class="pane landing dl-pane" id="d-downloader" data-role="pane-downloader" role="tabpanel" aria-labelledby="d-dl-tab" hidden>
+        <p class="eyebrow dl-brand"><span data-icon="download"></span>NexusDownloader</p>
+        <h1 class="h1">Download a YouTube video.</h1>
+        <p class="sub">Save the full video or just its audio. Choose from the formats this link actually offers.</p>
+
+        <label class="field dl-invite" data-role="dl-invite-field" hidden>
+          <span class="lbl">Studio invite code</span>
+          <input data-role="dl-invite" type="password" autocomplete="off" maxlength="120" placeholder="Enter invite code">
+        </label>
+        <form class="urlbar" data-role="dl-inspect-form">
+          <span class="url-ic" data-icon="link"></span>
+          <label class="sr" for="d-dl-link">YouTube video link</label>
+          <input id="d-dl-link" data-role="dl-link" type="url" required maxlength="2048" inputmode="url" autocomplete="off" spellcheck="false" autocapitalize="off" enterkeyhint="go" placeholder="https://www.youtube.com/watch?v=…">
+          <button class="btn primary" type="submit" data-role="dl-inspect">Inspect<kbd aria-hidden="true">↵</kbd></button>
+        </form>
+        <p class="source" data-role="dl-source" role="status">Watch, share and Shorts links · One video at a time</p>
+        <p class="callout" data-role="dl-hint" hidden></p>
+
+        <ul class="clips dl-clips" data-role="dl-details" hidden>
+          <li class="clip dl-card">
+            <div class="dl-preview">
+              <img class="clip-art" data-role="dl-thumbnail" alt="" referrerpolicy="no-referrer" hidden>
+              <div class="dl-title-block">
+                <p class="eyebrow">Source</p>
+                <h2 class="h2" data-role="dl-title"></h2>
+                <p class="meta" data-role="dl-meta"></p>
+              </div>
+            </div>
+            <form class="dl-options" data-role="dl-start-form">
+              <label class="field" for="d-dl-format">
+                <span class="lbl">Format</span>
+                <select id="d-dl-format" data-role="dl-format" required></select>
+              </label>
+              <label class="field" for="d-dl-quality">
+                <span class="lbl">Quality</span>
+                <select id="d-dl-quality" data-role="dl-quality" aria-describedby="d-dl-choice" required></select>
+              </label>
+              <p class="hint dl-choice" id="d-dl-choice" data-role="dl-choice"></p>
+              <button class="btn primary" type="submit" data-role="dl-start"><span data-icon="download"></span>Prepare download</button>
+            </form>
+          </li>
+        </ul>
+
+        <div class="work-card dl-transfer" data-role="dl-transfer" hidden>
+          <div class="work-top">
+            <span class="work-pulse" data-role="dl-pulse" aria-hidden="true"></span>
+            <span class="work-badge">Download</span>
+          </div>
+          <div class="work-num"><b data-role="dl-percent">—</b></div>
+          <p class="stage-line" data-role="dl-stage" role="status">Queued</p>
+          <p class="meta" data-role="dl-stats" hidden></p>
+          <div class="progress" data-role="dl-progress" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+          <button class="btn small" type="button" data-role="dl-check" hidden>Check download status</button>
+          <div class="dl-save" data-role="dl-ready" hidden>
+            <div>
+              <p class="eyebrow">Ready to save</p>
+              <p class="dl-filename" data-role="dl-filename"></p>
+              <p class="meta" data-role="dl-size"></p>
+            </div>
+            <a class="btn primary" data-role="dl-file" download referrerpolicy="no-referrer"><span data-icon="download"></span><span data-role="dl-file-label">Save file</span></a>
+          </div>
+        </div>
+        <p class="hint dl-use">Only download media you’re authorized to save.</p>
       </section>
     </div>
   </main>
@@ -239,7 +297,7 @@
 </div>
 
 <div class="toasts" data-role="toasts" aria-live="polite"></div>
-<script src="/static/core.js?v=16"></script>
-<script src="/static/ui-d.js?v=16"></script>
+<script src="/static/core.js?v=17"></script>
+<script src="/static/ui-d.js?v=17"></script>
 </body>
 </html>
