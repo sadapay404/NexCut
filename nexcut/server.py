@@ -487,7 +487,7 @@ class Handler(BaseHTTPRequestHandler):
         mp4s = sorted(p for p in directory.iterdir() if p.is_file() and p.suffix.lower() == ".mp4")
         clips = getattr(cut_job, "clips", None) or []
         buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as bundle:
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as bundle:
             for idx, item in enumerate(mp4s, start=1):
                 folder = f"Clip {idx:02d}"
                 bundle.write(item, arcname=f"{folder}/Clip{idx:02d}.mp4")

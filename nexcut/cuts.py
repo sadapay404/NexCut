@@ -51,6 +51,7 @@ class CutManager:
                title: str = "", details: str = "") -> CutJob:
         job = CutJob(id=uuid.uuid4().hex[:12], created=time.time(),
                      quality=f"{height}p" if height < 2160 else "2160p (4K)")
+        job.clips = list(clips)
         with self._lock:
             self._cuts[job.id] = job
             if len(self._cuts) > MAX_CUTS:

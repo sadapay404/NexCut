@@ -306,11 +306,11 @@
 
       if (c.clips && c.clips.length) {
         try {
-          var hist = JSON.parse(localStorage.getItem("saa_history_d") || "[]");
+          var hist = JSON.parse(localStorage.getItem("saa_history_d_v2") || "[]");
           var tEl = R("fact-title");
           var chEl = R("fact-channel");
-          var vTitle = (tEl && tEl.textContent && tEl.textContent.trim() !== "—") ? tEl.textContent.trim() : (c.title || "Untitled video");
-          var channel = (chEl && chEl.textContent && chEl.textContent.trim() !== "—") ? chEl.textContent.trim() : "YouTube";
+          var vTitle = (tEl && tEl.textContent && tEl.textContent.trim() !== "—") ? tEl.textContent.trim() : ((lastModel && lastModel.title) || c.title || "Untitled video");
+          var channel = (chEl && chEl.textContent && chEl.textContent.trim() !== "—") ? chEl.textContent.trim() : ((lastModel && lastModel.channel) || "YouTube");
           var now = new Date();
           var dd = String(now.getDate()).padStart(2, "0");
           var mm = String(now.getMonth() + 1).padStart(2, "0");
@@ -320,7 +320,7 @@
           var entry = { title: vTitle, channel: channel, dateStr: dateStr, timeStr: timeStr, clips: c.clips };
           if (!hist.length || hist[0].title !== entry.title || hist[0].clips.length !== entry.clips.length) {
             hist.unshift(entry);
-            localStorage.setItem("saa_history_d", JSON.stringify(hist.slice(0, 20)));
+            localStorage.setItem("saa_history_d_v2", JSON.stringify(hist.slice(0, 20)));
           }
         } catch (_) {}
       }
@@ -366,7 +366,9 @@
     "home": function () {
       var hb = document.getElementById("d-home-btn");
       if (hb) hb.hidden = true;
-      view.showPane("landing");
+      var nr = R("new-run");
+      if (nr) nr.click();
+      else view.showPane("landing");
     },
 
     "credits-open": function () {
@@ -388,7 +390,7 @@
       cutter.hidden = open;
       if (open && list) {
         var items = [];
-        try { items = JSON.parse(localStorage.getItem("saa_history_d") || "[]"); } catch (_) {}
+        try { items = JSON.parse(localStorage.getItem("saa_history_d_v2") || "[]"); } catch (_) {}
         list.innerHTML = "";
         if (!items.length) {
           list.appendChild(N.el("p", "sub", "No cut history yet. Extract a video to see it here."));
@@ -503,10 +505,21 @@
 
     var foot = document.querySelector(".foot");
     var mark = document.querySelector(".panel-mark");
-    if (foot && mark && typeof IntersectionObserver !== "undefined") {
-      new IntersectionObserver(function (entries) {
-        mark.classList.toggle("is-floating", entries[0].isIntersecting);
-      }, { threshold: 0.05 }).observe(foot);
+    if (foot && mark) {
+      var rafId = 0;
+      var syncMark = function () {
+        rafId = 0;
+        var rect = foot.getBoundingClientRect();
+        var overlap = Math.max(0, window.innerHeight - rect.top);
+        mark.classList.toggle("is-floating", overlap > 0);
+        mark.style.transform = overlap > 0 ? ("translateY(-" + overlap.toFixed(1) + "px)") : "";
+      };
+      var onScroll = function () {
+        if (!rafId) rafId = requestAnimationFrame(syncMark);
+      };
+      window.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener("resize", onScroll, { passive: true });
+      syncMark();
     }
 
     var manualBox = document.getElementById("d-manual-box");
