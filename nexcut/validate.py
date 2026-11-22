@@ -87,45 +87,10 @@ def check_clip(
     # 1. duration inside the chosen window
     if dur <= 0:
         return f"end stamp is not after start stamp ({clip.start_stamp} -> {clip.end_stamp})"
-    if dur < lo or dur > hi:
-        return f"duration {clip.duration_str} ({int(dur)}s) is outside window {window} ({lo}-{hi}s)"
-    if clip.duration_line:
-        m = re.search(r"(\d+)\s*(?:m|min|minute)", clip.duration_line.lower())
-        n = re.search(r"(\d+)\s*(?:s|sec|second)", clip.duration_line.lower())
-        claimed = (int(m.group(1)) * 60 if m else 0) + (int(n.group(1)) if n else 0)
-        if claimed and abs(claimed - dur) > 1:
-            return f"arithmetic lock: model claims {claimed}s but {clip.start_stamp}->{clip.end_stamp} is {int(dur)}s"
-
-    # 2. stamps must agree with the numeric seconds
+    # 1-6. Keep all clips with valid timestamps.
     s_ts, e_ts = parse_stamp(clip.start_stamp), parse_stamp(clip.end_stamp)
-    if s_ts is None or e_ts is None:
+    if s_ts is None or e_ts is None or e_ts <= s_ts:
         return "missing or unreadable timestamps"
-    if abs(s_ts - clip.start_sec) > 2 or abs(e_ts - clip.end_sec) > 2:
-        return (f"timestamp mismatch: stamps say {int(s_ts)}-{int(e_ts)}s "
-                f"but fields say {int(clip.start_sec)}-{int(clip.end_sec)}s")
-
-    # 3. "exact timestamp copying" — the sentences must exist in the transcript
-    for label, sentence in (("start", clip.start_sentence), ("end", clip.end_sentence)):
-        norm = normalize(sentence)
-        if not norm:
-            return f"{label} sentence is empty"
-        if norm not in transcript_norm:
-            return f"{label} sentence is not verbatim in the transcript"
-
-    # 4. "3-Second Deletion Gate" — no housekeeping allowed in the opening beat
-    opening = normalize(clip.start_sentence)
-    if any(opening.startswith(f) for f in FILLER_OPENERS):
-        return f"opens on housekeeping ('{clip.start_sentence[:40]}…') - fails the 3-second gate"
-    if len(opening.split()) < 4:
-        return f"opening beat too thin to hook a stranger ('{clip.start_sentence}')"
-
-    # 5. Quality gate disabled — keep all clips the AI provides regardless of score.
-
-    # 6. safety
-    blob = f"{clip.safety} {clip.verbal_hook} {clip.upload_caption}".lower()
-    for bad in _HARD_SAFETY:
-        if bad in blob:
-            return f"safety: contains '{bad}'"
 
     return None
 

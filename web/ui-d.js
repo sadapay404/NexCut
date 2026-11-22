@@ -293,9 +293,13 @@
       state.setAttribute("data-tone", cut.status === "error" ? "bad" : cut.status === "done" ? "ok" : cut.status === "warn" ? "warn" : "");
       R("cut-track").hidden = cut.status !== "progress";
       R("cut-fill").style.transform = "scaleX(" + (Math.max(0, Math.min(100, Number(cut.pct) || 0)) / 100) + ")";
+      var prevFilesLen = lastFiles.length;
+      var prevZip = lastZip;
       lastFiles = c.files || [];
       lastZip = c.zipUrl || "";
-      renderList();
+      if (lastFiles.length !== prevFilesLen || lastZip !== prevZip) {
+        renderList();
+      }
       syncZipLink();
 
       if (c.clips && c.clips.length) {
@@ -351,6 +355,10 @@
         manualBtn.disabled = false;
       });
     },
+    "home": function () {
+      N.go("landing");
+    },
+
     "history": function () {
       var hp = R("history-panel");
       var cutter = R("pane-cutter");

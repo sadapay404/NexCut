@@ -183,7 +183,8 @@ them up as vertical-video clips for a {audience} audience, delivered in
 6. STRONG ENDING. End on a punchline, a twist, a visual/verbal mic-drop, or a
    sharp open loop — never trail off on filler or "so yeah".
 7. LENGTH HONESTY. If the transcript cannot fill the window without padding,
-   return fewer clips. Fewer good clips beats a padded one.
+   You MUST return at least 5 clips and up to 15 clips per video. Never return
+   fewer than 5 clips — find the best 5 to 15 standalone moments.
 8. NO DUPLICATES. Clips must not overlap in time, and must not reuse anything
    listed under `already_used`.
 9. SAFETY. No accusations against named private individuals, no addresses, no
