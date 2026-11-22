@@ -561,7 +561,7 @@ def _via_ytdlp(vid: str, language: str) -> Transcript:
             cmd = [
                 exe, "--skip-download", "--write-auto-subs", "--write-subs",
                 *cookies_arg(),
-                "--sub-langs", f"{language}.*,{language}", "--sub-format", "vtt",
+                "--sub-langs", f"{language},{language}-orig", "--sub-format", "vtt",
                 "-o", str(Path(tmp) / "%(id)s.%(ext)s"),
                 f"https://www.youtube.com/watch?v={vid}",
             ]
