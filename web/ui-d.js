@@ -156,8 +156,20 @@
 
   function syncZipLink() {
     var link = R("zip-link");
-    link.hidden = !(lastModel && lastModel.zip && lastZip);
-    link.setAttribute("href", lastZip || "#");
+    link.hidden = false;
+    if (lastZip) {
+      link.setAttribute("href", lastZip);
+      link.className = "btn small primary";
+      link.removeAttribute("aria-disabled");
+      link.style.pointerEvents = "";
+      link.style.opacity = "";
+    } else {
+      link.setAttribute("href", "#");
+      link.className = "btn small";
+      link.setAttribute("aria-disabled", "true");
+      link.style.pointerEvents = "none";
+      link.style.opacity = "0.5";
+    }
   }
 
   function moveCredits(inSlot) {
