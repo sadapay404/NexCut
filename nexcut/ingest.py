@@ -675,10 +675,6 @@ CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "cache"
 # (label, function) — the labels appear in error messages, so they are fixed here
 # rather than derived from function names.
 STRATEGIES: tuple[tuple[str, str], ...] = (
-    ("innertube", "_via_innertube"),
-    ("timedtext", "_via_timedtext"),
-    ("watch-page", "_via_watch_page"),
-    ("yt-dlp", "_via_ytdlp"),
     ("transcript-api", "_via_transcript_api"),
 )
 
