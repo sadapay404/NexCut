@@ -452,7 +452,7 @@
         t.textContent = msg;
         t.classList.add("is-open");
         clearTimeout(t._timer);
-        t._timer = setTimeout(function () { t.classList.remove("is-open"); }, 3200);
+        t._timer = setTimeout(function () { t.classList.remove("is-open"); }, 2000);
       };
       for (var i = 0; i < rows.length; i++) {
         var s = (rows[i].querySelector('[data-trim="start"]').value || "").trim();
