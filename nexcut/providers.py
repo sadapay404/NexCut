@@ -670,7 +670,7 @@ class ManualProvider:
         answer_path.write_text("", encoding="utf-8")
 
         try:
-            subprocess.run(["clip"], input=full_prompt.encode("utf-8"), check=False)
+            subprocess.run(["clip"], input=full_prompt.encode("utf-16le"), check=False)
         except Exception:  # noqa: BLE001
             pass
 
