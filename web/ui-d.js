@@ -441,6 +441,45 @@
       if (stage) stage.textContent = "Cancelled";
     },
 
+    "dl-add-clip": function () {
+      var list = document.getElementById("d-dl-trim-list");
+      var _s0 = R("dl-trim-start"), _e0 = R("dl-trim-end");
+      if (!list) return;
+      var rows = list.querySelectorAll(".dl-trim-row");
+      var showErr = function (msg) {
+        var t = document.getElementById("d-dl-toast");
+        if (!t) return;
+        t.textContent = msg;
+        t.classList.add("is-open");
+        clearTimeout(t._timer);
+        t._timer = setTimeout(function () { t.classList.remove("is-open"); }, 3200);
+      };
+      for (var i = 0; i < rows.length; i++) {
+        var s = (rows[i].querySelector('[data-trim="start"]').value || "").trim();
+        var e = (rows[i].querySelector('[data-trim="end"]').value || "").trim();
+        if (!s || !e) {
+          showErr("Clip " + (i + 1) + " is missing a Start or End time.");
+          return;
+        }
+      }
+      var row = document.createElement("div");
+      row.className = "dl-trim-row";
+      var sIn = document.createElement("input");
+      sIn.type = "text"; sIn.className = "dl-trim-in"; sIn.setAttribute("data-trim", "start");
+      sIn.placeholder = "0:00:00 (H:M:S)"; sIn.setAttribute("aria-label", "Start time");
+      var sep = document.createElement("span");
+      sep.className = "dl-trim-sep"; sep.textContent = "|";
+      var eIn = document.createElement("input");
+      eIn.type = "text"; eIn.className = "dl-trim-in"; eIn.setAttribute("data-trim", "end");
+      eIn.placeholder = "0:01:00 (H:M:S)"; eIn.setAttribute("aria-label", "End time");
+      var rm = document.createElement("button");
+      rm.type = "button"; rm.className = "btn small"; rm.textContent = "×";
+      rm.setAttribute("aria-label", "Remove clip");
+      rm.addEventListener("click", function () { row.remove(); });
+      row.appendChild(sIn); row.appendChild(sep); row.appendChild(eIn); row.appendChild(rm);
+      list.appendChild(row);
+    },
+
     "history": function () {
       var hp = R("history-panel");
       var cutter = R("pane-cutter");

@@ -256,6 +256,29 @@
           </li>
         </ul>
 
+        <div class="dl-room" id="d-dl-trim-room">
+          <div class="dl-room-head">
+            <span class="lbl">Custom Time Range (Optional)</span>
+            <button type="button" class="btn small" id="d-dl-add-clip" data-action="dl-add-clip">+ Add Clip</button>
+          </div>
+          <div class="dl-trim-list" id="d-dl-trim-list">
+            <div class="dl-trim-row">
+              <input type="text" class="dl-trim-in" data-role="dl-trim-start" data-trim="start" placeholder="0:00:00 (H:M:S)" aria-label="Start time">
+              <span class="dl-trim-sep">|</span>
+              <input type="text" class="dl-trim-in" data-role="dl-trim-end" data-trim="end" placeholder="0:01:00 (H:M:S)" aria-label="End time">
+            </div>
+          </div>
+        </div>
+
+        <div class="dl-room" id="d-dl-hist-room">
+          <div class="dl-room-head">
+            <span class="lbl">Download History</span>
+          </div>
+          <div class="dl-hist-list" id="d-dl-hist-list">
+            <p class="meta">No downloads yet.</p>
+          </div>
+        </div>
+
         <div class="work-card dl-transfer" data-role="dl-transfer" hidden>
           <div class="work-top">
             <span class="work-pulse" data-role="dl-pulse" aria-hidden="true"></span>
@@ -316,6 +339,7 @@
   </div>
 </div>
 
+<div class="dl-err-toast" id="d-dl-toast" role="alert" aria-live="assertive"></div>
 <div class="toasts" data-role="toasts" aria-live="polite"></div>
 <script src="/static/core.js?v=17"></script>
 <script src="/static/ui-d.js?v=17"></script>
