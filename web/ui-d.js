@@ -359,6 +359,16 @@
       N.go("landing");
     },
 
+    "credits-open": function () {
+      var m = document.getElementById("d-credits-modal");
+      if (m) m.hidden = false;
+    },
+
+    "credits-close": function () {
+      var m = document.getElementById("d-credits-modal");
+      if (m) m.hidden = true;
+    },
+
     "history": function () {
       var hp = R("history-panel");
       var cutter = R("pane-cutter");
@@ -510,6 +520,17 @@
         }).finally(function () {
           manualBtn.disabled = false;
         });
+      });
+    }
+
+    var creditsBtn = document.getElementById("d-credits-btn");
+    var creditsModal = document.getElementById("d-credits-modal");
+    var creditsClose = document.getElementById("d-credits-close");
+    if (creditsBtn && creditsModal) {
+      creditsBtn.addEventListener("click", function () { creditsModal.hidden = false; });
+      if (creditsClose) creditsClose.addEventListener("click", function () { creditsModal.hidden = true; });
+      creditsModal.addEventListener("click", function (e) {
+        if (e.target === creditsModal) creditsModal.hidden = true;
       });
     }
   }

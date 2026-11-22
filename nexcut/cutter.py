@@ -163,6 +163,7 @@ def download(video_id: str, height: int) -> Path:
         part.unlink(missing_ok=True)
     proc = _run([
         *ytdlp, "--no-playlist", "--no-warnings", "--no-progress", "--no-continue",
+        "--force-overwrites", "--extractor-args", "youtube:player_client=android,web",
         *cookies_arg(),
         "-f", fmt, "--merge-output-format", "mp4",
         "-o", str(target), f"https://www.youtube.com/watch?v={video_id}",

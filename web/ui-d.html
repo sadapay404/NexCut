@@ -216,9 +216,26 @@
   </main>
 
   <footer class="foot" data-role="credits-home">
-    <p class="credits" data-role="credits"><span>Proudly Created by <b>Sheikh Arsalan</b> <span class="join">in Collaboration with</span> <b>Mubashir</b></span></p>
+    <p class="credits" data-role="credits"><span>Proudly Created by <button type="button" class="foot-link" id="d-credits-btn" data-action="credits-open"><b>Mubashir</b></button> <span class="join">in Collaboration with</span> <b>Sheikh Arsalan</b></span></p>
     <span class="build" data-role="build-tag"></span>
   </footer>
+</div>
+
+<div class="credits-backdrop" id="d-credits-modal" hidden>
+  <div class="credits-modal" role="dialog" aria-modal="true" aria-labelledby="d-credits-title">
+    <div class="credits-head">
+      <h3 id="d-credits-title">Credits</h3>
+      <button type="button" class="btn small" id="d-credits-close" data-action="credits-close" aria-label="Close">Close</button>
+    </div>
+    <dl class="credits-list">
+      <div><dt>Who Am I</dt><dd>Mubashir</dd></div>
+      <div><dt>Created For</dt><dd>Digital Sheikh Nexus Academy</dd></div>
+      <div><dt>Languages Used</dt><dd>Python, HTML, CSS, JavaScript</dd></div>
+      <div><dt>Licence</dt><dd>Proprietary — All Rights Reserved</dd></div>
+      <div><dt>Copyright</dt><dd>© 2026 Mubashir &amp; Digital Sheikh Nexus Academy</dd></div>
+    </dl>
+    <p class="credits-note">The App Was Created In Collaboration With Sir Sheikh Arsalan.</p>
+  </div>
 </div>
 
 <div class="toasts" data-role="toasts" aria-live="polite"></div>
