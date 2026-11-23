@@ -529,13 +529,39 @@ class Handler(BaseHTTPRequestHandler):
     @staticmethod
     def _build_clip_docx(clip: dict, idx: int) -> bytes:
         from xml.sax.saxutils import escape as xml_escape
-        titles = clip.get("titles") or {}
+
+        def short_copy(value: object, *, words: int, chars: int) -> str:
+            # Preserve ready-to-use copy. Bound overlong model/older output
+            # at word boundaries rather than printing a long paragraph.
+            parts = value.split() if isinstance(value, str) else []
+            text = " ".join(parts)
+            # A standalone emoji or punctuation is not a word.
+            word_flags = [any(c.isalnum() for c in part) for part in parts]
+            if sum(word_flags) <= words and len(text) <= chars:
+                return text
+            kept: list[str] = []
+            length = count = 0
+            for part, is_word in zip(parts, word_flags):
+                extra = len(part) + bool(kept)
+                if count + is_word > words or length + extra >= chars:  # leave room for the ellipsis
+                    break
+                kept.append(part)
+                length += extra
+                count += is_word
+            return (" ".join(kept) or parts[0][:chars - 1]).rstrip(" ,.;:…") + "…"
+
+        titles = clip.get("titles")
+        titles = titles if isinstance(titles, dict) else {}
+        thumbnail = short_copy(titles.get("clickbait"), words=5, chars=34) or short_copy(
+            clip.get("thumbnail_text"), words=5, chars=34
+        )
+        opening_title = short_copy(titles.get("debate"), words=7, chars=45)
         rows = [
             (f"Clip {idx:02d}", clip.get("hook_summary") or clip.get("title") or ""),
             ("Duration", clip.get("duration_line") or f"{clip.get('start_stamp', '')} -> {clip.get('end_stamp', '')}"),
-            ("Search Title", titles.get("search", "")),
-            ("Video Title", clip.get("captions") or ""),
-            ("Thumbnail text", clip.get("thumbnail_text") or ""),
+            ("Thumbnail text", thumbnail),
+            ("Video Title (0:00–0:05)", opening_title),
+            ("Search Title", titles.get("search") or ""),
             ("Upload Caption", clip.get("upload_caption") or ""),
             ("Pinned Comment", clip.get("pinned_comment") or ""),
             ("Hashtags", clip.get("hashtags") or ""),

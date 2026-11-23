@@ -197,10 +197,15 @@ matter), specificity (concrete detail, not generalities), speed (does it move).
 `avg` is the mean of the four, to one decimal. Anything below {QUALITY_GATE}
 will be dropped, so do not pad the list with weak candidates.
 
-## TITLES
-- clickbait: 6-10 words, curiosity only, no false claim.
-- search: what a viewer would actually type into search, 3-7 words.
-- debate: a question the comments will fight over.
+## TITLES — provide both pieces of editing copy for every clip
+- `titles.clickbait`: exact thumbnail text, 2–5 words, at most 34 characters.
+  One concrete surprise or tension; a quick read, with no false claim.
+  Example: "The SECRET door".
+- `titles.debate`: video title shown on screen 0:00–0:05. A different hook, as
+  one question in 3–7 words, at most 45 characters. Use a person, detail or
+  stakes from the clip. Do not spoil the payoff or write styling instructions.
+  Example: "Who Sealed the Second Door?".
+- `titles.search`: separate upload title, what a viewer would type into search.
 
 ## OUTPUT
 Return ONE JSON object and nothing else. No prose, no markdown fence.

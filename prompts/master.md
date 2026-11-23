@@ -143,13 +143,17 @@ the clip does not contain, and never invent a surname, case, date or outcome.
 
 ## PACKAGING — EVERY CLIP
 
-- **Thumbnail text** — 2–5 words, 1–2 matching emojis, one CAPS word. Emotion must
-  match the beat: shock 😳😱 · death 💀⚰️ · fear 👻 · funny 😭🤣 · warning ⚠️🚨 ·
-  love/letter 💌 · mystery 🤔🔍. Examples: "HE PRESSED IT 💀", "SHE KNEW 😳".
+- **Thumbnail text** (`titles.clickbait`) — exact copy to place on the thumbnail:
+  2–5 words, at most 34 characters, one line. Lead with a concrete surprise or
+  tension from the clip, not "Watch this" or a plot summary. At most one CAPS
+  word; an emoji is optional if it fits the line. Example: "The SECRET door".
+- **Video title** (`titles.debate`, on screen 0:00–0:05, top centre) — a different
+  hook: one question in 3–7 words, at most 45 characters. Name the person, detail
+  or stakes so a stranger gets it at a glance. Open a loop without giving away
+  the payoff. Example: "Who Sealed the Second Door?". This is the text itself,
+  not a styling note or an upload title. Fill both text fields for every clip.
 - **Search title** (upload title) — under 70 characters, main keyword inside the
   first 3 words, question or curiosity shape, names/places included.
-- **On-screen question** (first 5–7 s, top centre) — 4–8 words, under 45 characters,
-  splits viewers into sides, 1–2 emojis. "Accident… or murder? 😳⚠️"
 - **Verbal hook** — the exact first spoken line, plus one sentence on why it stops
   the scroll.
 - **Scores** — curiosity, stakes, specificity, speed, average.
