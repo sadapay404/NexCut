@@ -773,6 +773,17 @@
         put("dl-size", size(file.size));
         put("dl-file-label", "Save " + (file.format === "zip" ? "ZIP" : run.choice.format.toUpperCase()));
         dl("dl-ready").hidden = false;
+        try {
+          var dlTitle = (dl("dl-title") && dl("dl-title").textContent) || "Downloaded video";
+          var dlQual = (document.getElementById("d-dl-quality") && document.getElementById("d-dl-quality").value) || "1080p";
+          var dHist = JSON.parse(localStorage.getItem("saa_dl_history_d") || "[]");
+          var nowD = new Date();
+          var dStr = String(nowD.getDate()).padStart(2, "0") + "-" + String(nowD.getMonth() + 1).padStart(2, "0") + "-" + nowD.getFullYear();
+          var tStr = nowD.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
+          dHist.unshift({ title: dlTitle, quality: dlQual, date: dStr, time: tStr });
+          localStorage.setItem("saa_dl_history_d", JSON.stringify(dHist.slice(0, 20)));
+          if (typeof window._renderDlHistory === "function") window._renderDlHistory();
+        } catch (_) {}
         notice(run.noAutoSave ? "The download already finished. Use Save if you want the file."
           : "The file is ready. If your download doesn’t start, use Save.", "ok");
         stop(run);
@@ -969,6 +980,58 @@
       });
       dlCard.addEventListener("mouseleave", function () {
         dlCard.style.transform = "";
+      });
+    }
+
+    window._renderDlHistory = function () {
+      var hList = document.getElementById("d-dl-hist-list");
+      if (!hList) return;
+      var items = [];
+      try { items = JSON.parse(localStorage.getItem("saa_dl_history_d") || "[]"); } catch (_) {}
+      hList.innerHTML = "";
+      if (!items.length) {
+        hList.appendChild(N.el("p", "meta", "No downloads yet."));
+        return;
+      }
+      items.forEach(function (it) {
+        var row = document.createElement("div");
+        row.className = "dl-hist-item";
+        var left = document.createElement("div");
+        left.textContent = it.title || "Downloaded video";
+        var right = document.createElement("div");
+        right.className = "meta";
+        right.textContent = (it.quality || "1080p") + " · " + (it.date || "") + " · " + (it.time || "");
+        row.appendChild(left);
+        row.appendChild(right);
+        hList.appendChild(row);
+      });
+    };
+    window._renderDlHistory();
+
+    var trimList = document.getElementById("d-dl-trim-list");
+    if (trimList) {
+      var getMaxSec = function () {
+        var meta = document.querySelector('[data-role="dl-meta"]');
+        var m = meta && meta.textContent ? meta.textContent.match(/(\d+):(\d{2}):(\d{2})/) : null;
+        if (m) return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+        var m2 = meta && meta.textContent ? meta.textContent.match(/(\d+):(\d{2})/) : null;
+        return m2 ? Number(m2[1]) * 60 + Number(m2[2]) : 0;
+      };
+      trimList.addEventListener("input", function (e) {
+        var inp = e.target;
+        if (!inp || !inp.classList.contains("dl-trim-in")) return;
+        var maxSec = getMaxSec();
+        var isHour = maxSec >= 3600;
+        var maxDigits = isHour ? 5 : 4;
+        var digits = inp.value.replace(/\D/g, "").slice(0, maxDigits);
+        var formatted = digits;
+        if (isHour) {
+          if (digits.length > 3) formatted = digits.slice(0, 1) + ":" + digits.slice(1, 3) + ":" + digits.slice(3);
+          else if (digits.length > 1) formatted = digits.slice(0, 1) + ":" + digits.slice(1);
+        } else {
+          if (digits.length > 2) formatted = digits.slice(0, 2) + ":" + digits.slice(2);
+        }
+        inp.value = formatted;
       });
     }
 
