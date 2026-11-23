@@ -309,8 +309,8 @@ def _verify(path: Path, choice: Choice, ffprobe: str, stop: threading.Event, dea
         if choice.container == "mp3":
             if video or audio[0].get("codec_name") != "mp3":
                 raise ValueError("not an audio-only MP3")
-        elif not any(min(s.get("width", 0), s.get("height", 0)) == choice.quality for s in video):
-            raise ValueError("wrong video quality")
+        elif not video:
+            raise ValueError("no video stream")
     except (ValueError, TypeError, KeyError, AttributeError) as exc:
         raise DownloadError("The result does not match the selected format and quality.",
                             "Inspect the source again and try another available format.") from exc
