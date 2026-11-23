@@ -454,11 +454,33 @@
         clearTimeout(t._timer);
         t._timer = setTimeout(function () { t.classList.remove("is-open"); }, 2000);
       };
+      var parseSec = function (str) {
+        var parts = str.split(":").map(Number);
+        if (parts.some(isNaN)) return -1;
+        if (parts.length === 2) {
+          if (parts[1] >= 60) return -2;
+          return parts[0] * 60 + parts[1];
+        }
+        if (parts.length === 3) {
+          if (parts[1] >= 60 || parts[2] >= 60) return -2;
+          return parts[0] * 3600 + parts[1] * 60 + parts[2];
+        }
+        return -1;
+      };
       for (var i = 0; i < rows.length; i++) {
         var s = (rows[i].querySelector('[data-trim="start"]').value || "").trim();
         var e = (rows[i].querySelector('[data-trim="end"]').value || "").trim();
         if (!s || !e) {
           showErr("Clip " + (i + 1) + " is missing a Start or End time.");
+          return;
+        }
+        var sSec = parseSec(s), eSec = parseSec(e);
+        if (sSec < 0 || eSec < 0) {
+          showErr("Clip " + (i + 1) + " has an invalid time (seconds/minutes must be < 60).");
+          return;
+        }
+        if (sSec >= eSec) {
+          showErr("Clip " + (i + 1) + ": Start time must be before End time.");
           return;
         }
       }
@@ -815,7 +837,8 @@
       notice("Starting download…");
       renderTransfer({ status: "queued", progress: null });
       try {
-        var job = await request("/api/dl/start", { inspection_id: info.inspection_id, format_id: choice.id });
+        var fmtId = (typeof choice !== "undefined" && choice && choice.id) ? choice.id : (quality.value || "1080p");
+        var job = await request("/api/dl/start", { inspection_id: info.inspection_id, format_id: fmtId });
         if (!/^[0-9a-f]{32}$/.test(job.job_id)) throw new Error("NexCut did not return a download job.");
         jobId = job.job_id;
         failures = 0;
