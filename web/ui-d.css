@@ -336,15 +336,18 @@ html[data-theme="light"] .badge {
   width: 168px;
   height: 168px;
   opacity: .09;
-  transition: transform .35s cubic-bezier(.22, 1, .36, 1), opacity .35s ease;
+  will-change: transform;
+  transition: opacity .35s ease;
 }
 .panel-mark.is-floating {
   opacity: .16;
-  animation: float-mark 3.2s ease-in-out infinite;
 }
-@keyframes float-mark {
-  0%, 100% { transform: translateY(-48px); }
-  50% { transform: translateY(-58px); }
+.panel-mark.is-floating img {
+  animation: float-mark-img 3.2s ease-in-out infinite;
+}
+@keyframes float-mark-img {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
 }
 .panel-mark img { width: 100%; height: 100%; object-fit: cover; border-radius: 16px; }
 
@@ -1539,6 +1542,21 @@ kbd {
   align-items: center;
   gap: 12px;
   font-size: 13px;
+  transition: transform .22s cubic-bezier(.22, 1, .36, 1), border-color .22s ease, background .22s ease, box-shadow .22s ease;
+}
+.dl-hist-item:hover {
+  transform: translateY(-2px);
+  border-color: rgba(0, 163, 68, 0.35);
+  background: rgba(12, 20, 14, 0.85);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+.dl-hist-title, .hist-title {
+  transition: color .2s ease, transform .22s cubic-bezier(.22, 1, .36, 1);
+}
+.dl-hist-item:hover .dl-hist-title,
+.hist-row:hover .hist-title {
+  color: var(--accent, #22c55e);
+  transform: translateX(3px);
 }
 
 .dl-err-toast {

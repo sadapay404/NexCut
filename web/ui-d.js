@@ -959,8 +959,9 @@
       var syncMark = function () {
         rafId = 0;
         var rect = foot.getBoundingClientRect();
-        var overlap = Math.max(0, window.innerHeight - rect.top);
-        mark.classList.toggle("is-floating", overlap > 0);
+        var overlap = Math.max(0, Math.min(rect.height, window.innerHeight - rect.top));
+        var atRest = overlap >= Math.max(1, rect.height - 2);
+        mark.classList.toggle("is-floating", atRest);
         mark.style.transform = overlap > 0 ? ("translateY(-" + overlap.toFixed(1) + "px)") : "";
       };
       var onScroll = function () {
