@@ -775,12 +775,13 @@
         dl("dl-ready").hidden = false;
         try {
           var dlTitle = (dl("dl-title") && dl("dl-title").textContent) || "Downloaded video";
+          var dlUrl = (dl("dl-link") && dl("dl-link").value) || "";
           var dlQual = (document.getElementById("d-dl-quality") && document.getElementById("d-dl-quality").value) || "1080p";
           var dHist = JSON.parse(localStorage.getItem("saa_dl_history_d") || "[]");
           var nowD = new Date();
           var dStr = String(nowD.getDate()).padStart(2, "0") + "-" + String(nowD.getMonth() + 1).padStart(2, "0") + "-" + nowD.getFullYear();
           var tStr = nowD.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
-          dHist.unshift({ title: dlTitle, quality: dlQual, date: dStr, time: tStr });
+          dHist.unshift({ title: dlTitle, url: dlUrl, quality: dlQual, date: dStr, time: tStr });
           localStorage.setItem("saa_dl_history_d", JSON.stringify(dHist.slice(0, 20)));
           if (typeof window._renderDlHistory === "function") window._renderDlHistory();
         } catch (_) {}
@@ -994,8 +995,12 @@
         return;
       }
       items.forEach(function (it) {
-        var row = document.createElement("div");
+        var row = document.createElement("button");
+        row.type = "button";
         row.className = "dl-hist-item";
+        row.style.width = "100%";
+        row.style.textAlign = "left";
+        row.style.cursor = it.url ? "pointer" : "default";
         var left = document.createElement("div");
         left.textContent = it.title || "Downloaded video";
         var right = document.createElement("div");
@@ -1003,6 +1008,14 @@
         right.textContent = (it.quality || "1080p") + " · " + (it.date || "") + " · " + (it.time || "");
         row.appendChild(left);
         row.appendChild(right);
+        if (it.url) {
+          row.addEventListener("click", function () {
+            var inp = document.querySelector('[data-role="dl-link"]');
+            var form = document.querySelector('[data-role="dl-inspect-form"]');
+            if (inp) inp.value = it.url;
+            if (form) form.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+          });
+        }
         hList.appendChild(row);
       });
     };
