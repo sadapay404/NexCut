@@ -505,6 +505,7 @@ class Handler(BaseHTTPRequestHandler):
                     tr = fetch_transcript(params.get("url") or "",
                                           language=params.get("language") or "en")
                 except IngestError as exc:
+                    print(f"[nexcut] /api/transcript 422: {exc}", file=sys.stderr, flush=True)
                     return self._json(422, {"detail": str(exc), "hint": getattr(exc, "hint", "")})
                 return self._json(200, {
                     "video_id": tr.video_id, "title": tr.title, "channel": tr.channel,
