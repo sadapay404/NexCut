@@ -269,9 +269,11 @@ class Handler(BaseHTTPRequestHandler):
         return not codes or supplied in codes
 
     def _dl_post(self, path: str) -> None:
-        if path not in ("/api/dl/info", "/api/dl/start") or not self._dl_authorised():
+        cancel = re.fullmatch(r"/api/dl/cancel/([0-9a-f]{32})", path)
+        known = bool(cancel) or path in ("/api/dl/info", "/api/dl/start")
+        if not known or not self._dl_authorised():
             self.close_connection = True  # the body has not been read
-            if path not in ("/api/dl/info", "/api/dl/start"):
+            if not known:
                 return self._error(404, "Unknown downloader endpoint")
             return self._error(403, "A valid invite code is required")
         if (self.headers.get_content_type() != "application/json"
@@ -299,7 +301,11 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/dl/info":
                 return self._json(200, DL_MANAGER.inspect(body.get("url")))
-            return self._json(202, DL_MANAGER.start(body.get("inspection_id"), body.get("format_id")))
+            if cancel:
+                job = DL_MANAGER.cancel(cancel[1])
+                return self._json(202 if job["status"] == "cancelling" else 200, job)
+            return self._json(202, DL_MANAGER.start(body.get("inspection_id"), body.get("format_id"),
+                                                    body.get("ranges")))
         except DownloadError as exc:
             return self._json(exc.status, {"detail": str(exc), "hint": exc.hint})
         except Exception:  # native tool or filesystem errors must not disclose server configuration
@@ -526,10 +532,9 @@ class Handler(BaseHTTPRequestHandler):
         rows = [
             (f"Clip {idx:02d}", clip.get("hook_summary") or clip.get("title") or ""),
             ("Duration", clip.get("duration_line") or f"{clip.get('start_stamp', '')} -> {clip.get('end_stamp', '')}"),
-            ("Clickbait Title", titles.get("clickbait", "")),
             ("Search Title", titles.get("search", "")),
-            ("Debate Title", titles.get("debate", "")),
             ("Video Title", clip.get("captions") or ""),
+            ("Thumbnail text", clip.get("thumbnail_text") or ""),
             ("Upload Caption", clip.get("upload_caption") or ""),
             ("Pinned Comment", clip.get("pinned_comment") or ""),
             ("Hashtags", clip.get("hashtags") or ""),

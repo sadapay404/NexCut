@@ -20,10 +20,12 @@ import tempfile
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO
 from urllib.parse import parse_qs, urlsplit
+from zipfile import ZipFile
 
 from . import cutter
 
@@ -31,12 +33,13 @@ YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtu
 ID = re.compile(r"[A-Za-z0-9_-]{11}")
 FORMAT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}")
 KEY = re.compile(r"[0-9a-f]{32}")
-MIME_TYPES = {"mp4": "video/mp4", "webm": "video/webm", "mp3": "audio/mpeg"}
+MIME_TYPES = {"mp4": "video/mp4", "webm": "video/webm", "mp3": "audio/mpeg", "zip": "application/zip"}
 INSPECTION_TTL = 15 * 60
 FILE_TTL = 60 * 60
 MAX_INSPECTIONS = 48
 MAX_JOBS = 8
 MAX_ACTIVE = 2
+MAX_RANGES = 10
 MAX_FILE_BYTES = 2 * 1024**3
 PROBE_TIMEOUT = 75
 DOWNLOAD_TIMEOUT = 45 * 60
@@ -50,6 +53,10 @@ class DownloadError(Exception):
         super().__init__(message)
         self.hint = hint
         self.status = status
+
+
+class _Cancelled(Exception):
+    pass
 
 
 def youtube_url(raw: object) -> str:
@@ -109,6 +116,8 @@ class Choice:
     quality: int | None
     label: str
     separate_tracks: bool = False
+    # If set, download in this container and convert the audio to AAC locally.
+    source_container: str | None = None
 
     def payload(self) -> dict:
         return {"id": self.id, "format": self.container, "quality": self.quality,
@@ -128,10 +137,15 @@ def _choices(info: dict) -> dict[str, Choice]:
     for ext, audio_codecs in (("mp4", ("mp4a", "aac")), ("webm", ("opus", "vorbis"))):
         companion = next((f for f in audio if f.get("ext") in ({"m4a", "mp4", "aac"} if ext == "mp4" else {"webm"})
                           and _codec(f, "acodec").startswith(audio_codecs)), None)
-        video = [f for f in formats if f.get("ext") == ext and _codec(f, "vcodec")]
+        video = [f for f in formats if _codec(f, "vcodec") and (
+            f.get("ext") == ext or (ext == "mp4" and f.get("ext") == "webm"
+                                    and _codec(f, "vcodec").startswith(("vp9", "vp09", "av1", "av01")))
+        )]
         if ext == "mp4":
-            # Prefer H.264 for MP4 when offered at the chosen tier.
-            video.sort(key=lambda f: not _codec(f, "vcodec").startswith(("avc", "h264")))
+            # Prefer H.264, then native MP4. YouTube sometimes offers 2K/4K
+            # only as WebM VP9; it can be muxed into MP4 without scaling.
+            video.sort(key=lambda f: (not _codec(f, "vcodec").startswith(("avc", "h264")),
+                                      f.get("ext") != ext))
         for f in video:
             width, height = f.get("width"), f.get("height")
             if type(width) is not int or type(height) is not int or not 0 < min(width, height) <= 8192:
@@ -140,22 +154,45 @@ def _choices(info: dict) -> dict[str, Choice]:
             key = f"{ext}-{tier}"
             if key in choices:
                 continue
-            combined = _codec(f, "acodec").startswith(audio_codecs)
-            if not combined and (f.get("acodec") != "none" or not companion):
-                continue
-            selector = f["format_id"] if combined else f"{f['format_id']}+{companion['format_id']}"
-            choices[key] = Choice(key, ext, selector, tier, f"{tier}p · {width} × {height}", not combined)
-    for tier in (2160, 1440, 1080, 720, 480):
-        key = f"mp4-{tier}"
-        if key not in choices:
-            choices[key] = Choice(key, "mp4", f"bv*[height<={tier}]+ba/b[height<={tier}]/b", tier, f"{tier}p · MP4", True)
-        p_key = f"{tier}p"
-        if p_key not in choices:
-            choices[p_key] = choices[key]
+            selector = f["format_id"]
+            source_container = None
+            separate = f.get("acodec") == "none"
+            if separate:
+                track = companion or (audio[0] if ext == "mp4" and audio else None)
+                if not track:
+                    continue
+                selector += f"+{track['format_id']}"
+                if not companion:
+                    source_container = "mkv"
+            elif f.get("ext") != ext or not _codec(f, "acodec").startswith(audio_codecs):
+                if ext != "mp4" or not _codec(f, "acodec"):
+                    continue
+                source_container = f["ext"]
+            choices[key] = Choice(key, ext, selector, tier, f"{tier}p · {width} × {height}",
+                                  separate, source_container)
     best_audio = next(iter(audio), None) or next((f for f in formats if _codec(f, "acodec")), None)
     if best_audio:
         choices["mp3-audio"] = Choice("mp3-audio", "mp3", best_audio["format_id"], None, "Best available audio")
     return dict(sorted(choices.items(), key=lambda pair: (pair[1].container, -(pair[1].quality or 0))))
+
+
+def _trim_ranges(raw: object, duration: float | None) -> tuple[tuple[float, float], ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list) or len(raw) > MAX_RANGES:
+        raise DownloadError(f"Supply up to {MAX_RANGES} clip ranges.", status=400)
+    if raw and duration is None:
+        raise DownloadError("The video duration is unavailable. Inspect again or leave the range blank.", status=400)
+    ranges = []
+    for i, item in enumerate(raw, start=1):
+        start = _number(item.get("start")) if isinstance(item, dict) else None
+        end = _number(item.get("end")) if isinstance(item, dict) else None
+        if start is None or end is None or start >= end:
+            raise DownloadError(f"Clip {i}: Start must be nonnegative and before End.", status=400)
+        if duration is not None and end > duration:
+            raise DownloadError(f"Clip {i}: End cannot exceed the video duration.", status=400)
+        ranges.append((start, end))
+    return tuple(ranges)
 
 
 def _provider_error(output: str, *, probing: bool = False) -> DownloadError:
@@ -246,18 +283,20 @@ def _media_tools() -> tuple[str, str]:
     return ffmpeg, ffprobe
 
 
-def _verify(path: Path, choice: Choice, ffprobe: str) -> None:
+def _verify(path: Path, choice: Choice, ffprobe: str, stop: threading.Event, deadline: float) -> None:
     if not path.is_file() or path.stat().st_size <= 0:
         raise DownloadError("The download did not produce a file in the selected format.")
     if path.stat().st_size > MAX_FILE_BYTES:
         raise DownloadError("The result exceeds the 2 GiB download limit.", "Choose a smaller quality.", 413)
-    result = _capture([ffprobe, "-v", "error", "-show_entries",
-                       "format=format_name:stream=codec_type,codec_name,width,height",
-                       "-of", "json", str(path)], 20)
+    args = [ffprobe, "-v", "error", "-show_entries", "format=format_name:stream=codec_type,codec_name,width,height",
+            "-of", "json", str(path)]
+    with _child(args, stop, min(deadline, time.monotonic() + 20)) as process:
+        output, _ = process.communicate()
+        code = process.returncode
     try:
-        if result.returncode:
+        if code:
             raise ValueError("probe failed")
-        info = json.loads(result.stdout)
+        info = json.loads(output)
         containers = info["format"]["format_name"].split(",")
         audio = [s for s in info["streams"] if s.get("codec_type") == "audio"]
         video = [s for s in info["streams"] if s.get("codec_type") == "video"]
@@ -288,44 +327,107 @@ def _kill(process: subprocess.Popen) -> None:
             process.kill()
 
 
-def _transfer(args: list[str], on_progress) -> None:
-    # stdout and stderr share one pipe, including yt-dlp's progress output.
+def _check_running(stop: threading.Event, deadline: float) -> None:
+    if stop.is_set():
+        raise _Cancelled
+    if time.monotonic() >= deadline:
+        raise DownloadError("The download exceeded the time limit.", "Try a smaller quality or a shorter video.", 504)
+
+
+@contextmanager
+def _child(args: list[str], stop: threading.Event, deadline: float):
+    """A cancellable process group, including yt-dlp's FFmpeg children."""
+    _check_running(stop, deadline)
     with subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
                           env=_tool_env(), start_new_session=os.name != "nt",
                           creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0) as process:
-        timed_out = threading.Event()
+        done = threading.Event()
 
-        def expire() -> None:
-            timed_out.set()
-            _kill(process)
+        def watch() -> None:
+            while not done.wait(0.1):
+                if stop.is_set() or time.monotonic() >= deadline:
+                    _kill(process)
+                    return
 
-        timer = threading.Timer(DOWNLOAD_TIMEOUT, expire)
-        timer.daemon = True
-        timer.start()
-        errors: deque[str] = deque(maxlen=6)
+        watcher = threading.Thread(target=watch, daemon=True)
+        watcher.start()
         try:
-            for line in process.stdout:
-                if line.startswith(PROGRESS):
-                    try:
-                        event = json.loads(line[len(PROGRESS):])
-                    except ValueError:
-                        continue
-                    if isinstance(event, dict):
-                        on_progress(event)
-                elif line.startswith(PROCESSING):
-                    on_progress(None)
-                elif line.startswith("ERROR:"):
-                    errors.append(line[:1000])
-            code = process.wait()
+            yield process
         finally:
-            timer.cancel()
+            done.set()
+            watcher.join()
             if process.poll() is None:
                 _kill(process)
-        if timed_out.is_set():
-            raise DownloadError("The download exceeded the time limit.", "Try a smaller quality or a shorter video.", 504)
-        if code:
-            raise _provider_error("\n".join(errors))
+        _check_running(stop, deadline)
+
+
+def _transfer(args: list[str], on_progress, stop: threading.Event, deadline: float) -> None:
+    errors: deque[str] = deque(maxlen=6)
+    with _child(args, stop, deadline) as process:
+        for line in process.stdout:
+            if line.startswith(PROGRESS):
+                try:
+                    event = json.loads(line[len(PROGRESS):])
+                except ValueError:
+                    continue
+                if isinstance(event, dict):
+                    on_progress(event)
+            elif line.startswith(PROCESSING):
+                on_progress(None)
+            elif line.startswith("ERROR:"):
+                errors.append(line[:1000])
+        code = process.wait()
+    if code:
+        raise _provider_error("\n".join(errors))
+
+
+def _make_output(ffmpeg: str, source: Path, target: Path, ext: str, span: tuple[float, float] | None,
+                 stop: threading.Event, deadline: float, progress) -> None:
+    args = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
+    length = 0.0
+    if span is not None:
+        start, end = span
+        length = end - start
+        args += ["-ss", f"{start:.6f}"]
+    args += ["-i", str(source)]
+    if span is not None:
+        args += ["-t", f"{length:.6f}"]
+    if ext == "mp3":
+        args += ["-map", "0:a:0", "-c:a", "libmp3lame", "-q:a", "0"]
+    else:
+        args += ["-map", "0:v:0", "-map", "0:a:0"]
+        if ext == "mp4":
+            # Re-encode trims for non-keyframe boundaries, but don't re-encode
+            # the full video just to convert its audio track to AAC.
+            args += (["-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-threads", "4"]
+                     if span is not None else ["-c:v", "copy"])
+            args += ["-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"]
+        else:
+            args += ["-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "6", "-threads", "4",
+                     "-b:v", "0", "-crf", "30", "-c:a", "libopus"]
+    args += ["-progress", "pipe:1", "-nostats", str(target)]
+    with _child(args, stop, deadline) as process:
+        for line in process.stdout:
+            if length > 0 and line.startswith("out_time_us="):
+                try:
+                    fraction = int(line.split("=", 1)[1]) / (length * 1_000_000)
+                except ValueError:  # FFmpeg emits N/A before the first packet.
+                    continue
+                progress(min(1.0, max(0.0, fraction)))
+        code = process.wait()
+    if code:
+        raise DownloadError("FFmpeg could not trim the video." if span else "FFmpeg could not prepare the MP4.",
+                            "Check FFmpeg and try another range or quality.")
+
+
+def _bundle(target: Path, clips: list[Path], stop: threading.Event, deadline: float) -> None:
+    with ZipFile(target, "w") as bundle:
+        for clip in clips:
+            with clip.open("rb") as source, bundle.open(clip.name, "w", force_zip64=True) as out:
+                for chunk in iter(lambda: source.read(128 * 1024), b""):
+                    _check_running(stop, deadline)
+                    out.write(chunk)
 
 
 @dataclass
@@ -334,6 +436,7 @@ class Inspection:
     title: str
     choices: dict[str, Choice]
     expires: float
+    duration: float | None = None
 
 
 @dataclass
@@ -350,11 +453,17 @@ class Job:
     hint: str = ""
     size: int = 0
     finished: float | None = None
+    ranges: tuple[tuple[float, float], ...] = ()
+    stop: threading.Event = field(default_factory=threading.Event)
+
+    @property
+    def extension(self) -> str:
+        return "zip" if len(self.ranges) > 1 else self.choice.container
 
     def payload(self) -> dict:
         return {"job_id": self.id, "status": self.status, "progress": self.progress,
                 "speed": self.speed, "eta": self.eta, "detail": self.error, "hint": self.hint,
-                "file": {"name": self.name, "size": self.size,
+                "file": {"name": self.name, "size": self.size, "format": self.extension,
                          "url": f"/api/dl/file/{self.id}?token={self.token}"} if self.status == "ready" else None}
 
 
@@ -400,18 +509,19 @@ class DownloadManager:
         if not choices:
             raise DownloadError("YouTube returned no compatible MP4, WebM or audio formats.", TOOL_HINT)
         title = _text(info.get("title"), 250) or "YouTube video"
+        duration = _number(info.get("duration"))
         key = secrets.token_hex(16)
         with self._lock:
             self._prune()
             if len(self._inspections) >= MAX_INSPECTIONS:
                 self._inspections.pop(next(iter(self._inspections)))
-            self._inspections[key] = Inspection(url, title, choices, time.monotonic() + INSPECTION_TTL)
-        return {"inspection_id": key, "title": title, "duration": _number(info.get("duration")),
+            self._inspections[key] = Inspection(url, title, choices, time.monotonic() + INSPECTION_TTL, duration)
+        return {"inspection_id": key, "title": title, "duration": duration,
                 "channel": _text(info.get("channel") or info.get("uploader"), 140),
                 "thumbnail": _thumbnail(info.get("thumbnail")),
                 "formats": [choice.payload() for choice in choices.values()]}
 
-    def start(self, key: object, option: object) -> dict:
+    def start(self, key: object, option: object, ranges: object = None) -> dict:
         if not isinstance(key, str) or not KEY.fullmatch(key) or not isinstance(option, str) or len(option) > 32:
             raise DownloadError("Inspect the link and select one of the available formats.", status=400)
         with self._lock:
@@ -419,9 +529,12 @@ class DownloadManager:
             record = self._inspections.get(key)
             if record is None:
                 raise DownloadError("This inspection expired. Inspect the link again.", status=410)
-            choice = record.choices.get(option)
+            # Accept a human-readable MP4 alias only when that exact tier exists.
+            match = re.fullmatch(r"(480|720|1080|1440|2160)p", option)
+            choice = record.choices.get(f"mp4-{match[1]}" if match else option)
             if choice is None:
                 raise DownloadError("That format and quality were not offered by this source.", status=400)
+            spans = _trim_ranges(ranges, record.duration)
             if sum(job.finished is None for job in self._jobs.values()) >= MAX_ACTIVE:
                 raise DownloadError("NexCut is already preparing two downloads. Try again when one finishes.", status=429)
             tools = _media_tools()
@@ -429,7 +542,10 @@ class DownloadManager:
                 self._discard(next(job.id for job in self._jobs.values() if job.finished is not None))
             title = re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f]', "_", record.title[:100]).strip(" .") or "YouTube video"
             suffix = f"{choice.quality}p" if choice.quality else "audio"
-            job = Job(secrets.token_hex(16), secrets.token_hex(16), f"{title} - {suffix}.{choice.container}", choice)
+            label = " - clips" if len(spans) > 1 else " - clip" if spans else ""
+            ext = "zip" if len(spans) > 1 else choice.container
+            job = Job(secrets.token_hex(16), secrets.token_hex(16), f"{title} - {suffix}{label}.{ext}",
+                      choice, ranges=spans)
             self._jobs[job.id] = job
             try:
                 threading.Thread(target=self._run, args=(job, record.url, tools), daemon=True).start()
@@ -443,6 +559,16 @@ class DownloadManager:
             self._prune()
             return self._job(job_id).payload()
 
+    def cancel(self, job_id: str) -> dict:
+        with self._lock:
+            self._prune()
+            job = self._job(job_id)
+            if job.finished is None:
+                job.stop.set()
+                job.status = "cancelling"
+                job.progress = job.speed = job.eta = None
+            return job.payload()
+
     def open_file(self, job_id: str, *, authorised: bool, token: str) -> tuple[BinaryIO, str, str, int]:
         with self._lock:
             self._prune()
@@ -452,10 +578,10 @@ class DownloadManager:
             if job.status != "ready":
                 raise DownloadError("The file is not ready.", status=409)
             try:
-                stream = (self.root / job.id / f"media.{job.choice.container}").open("rb")
+                stream = (self.root / job.id / f"media.{job.extension}").open("rb")
             except OSError as exc:
                 raise DownloadError("The prepared file is no longer available.", status=404) from exc
-            return stream, job.name, MIME_TYPES[job.choice.container], job.size
+            return stream, job.name, MIME_TYPES[job.extension], job.size
 
     def _job(self, key: str) -> Job:
         job = self._jobs.get(key)
@@ -466,57 +592,100 @@ class DownloadManager:
     def _run(self, job: Job, url: str, tools: tuple[str, str]) -> None:
         choice = job.choice
         directory = self.root / job.id
-        target = directory / f"media.{choice.container}"
+        incoming = directory / "source"
+        source_ext = choice.source_container or choice.container
+        source = incoming / f"source.{source_ext}"
+        target = directory / f"media.{job.extension}"
         ffmpeg, ffprobe = tools
-        size = 0
+        deadline = time.monotonic() + DOWNLOAD_TIMEOUT
         error = hint = ""
+
+        def update(status: str, pct: float | None = None, speed: float | None = None,
+                   eta: float | None = None) -> None:
+            with self._lock:
+                _check_running(job.stop, deadline)
+                job.status, job.progress, job.speed, job.eta = status, pct, speed, eta
 
         def progress(event: dict | None) -> None:
             if event is None:
-                with self._lock:
-                    job.status = "processing"
-                    job.progress = job.speed = job.eta = None
+                update("processing")
                 return
             done = _number(event.get("downloaded_bytes"))
             total = _number(event.get("total_bytes")) or _number(event.get("total_bytes_estimate"))
             if done is not None and done > MAX_FILE_BYTES:
                 raise DownloadError("The download exceeds the 2 GiB limit.", "Choose a smaller quality.")
-            with self._lock:
-                job.status = "downloading"
-                job.progress = round(min(100, 100 * done / total), 1) if done is not None and total else None
-                job.speed = _number(event.get("speed"))
-                job.eta = _number(event.get("eta"))
+            pct = round(min(100, 100 * done / total), 1) if done is not None and total else None
+            update("downloading", pct, _number(event.get("speed")), _number(event.get("eta")))
 
         try:
+            _check_running(job.stop, deadline)
             directory.mkdir(parents=True, mode=0o700)
+            incoming.mkdir()
             with tempfile.TemporaryDirectory(prefix="nexcut-dl-") as folder:
                 args = [*_command(Path(folder)), "--ffmpeg-location", ffmpeg,
                         "--quiet", "--progress", "--newline", "--progress-delta", "0.5",
                         "--progress-template", "download:" + PROGRESS + "%(progress)j",
                         "--progress-template", "postprocess:" + PROCESSING + "%(progress.status)s",
                         "--max-filesize", str(MAX_FILE_BYTES), "-f", choice.selector,
-                        "--paths", f"home:{directory}", "-o", "media.%(ext)s"]
+                        "--paths", f"home:{incoming}", "-o", "source.%(ext)s"]
                 if choice.container == "mp3":
                     args += ["--extract-audio", "--audio-format", "mp3", "--audio-quality", "0"]
                 else:
-                    args += ["--merge-output-format", choice.container]
-                with self._lock:
-                    job.status = "downloading"
-                _transfer([*args, "--", url], progress)
-            progress(None)
-            _verify(target, choice, ffprobe)
+                    args += ["--merge-output-format", source_ext]
+                update("downloading")
+                _transfer([*args, "--", url], progress, job.stop, deadline)
+            update("processing")
+            if not source.is_file():
+                raise DownloadError("The download did not produce a file in the selected format.")
+            if source.stat().st_size > MAX_FILE_BYTES:
+                raise DownloadError("The source exceeds the 2 GiB limit.", "Choose a smaller quality.", 413)
+
+            if job.ranges:
+                clips = []
+                total = 0
+                count = len(job.ranges)
+                for i, span in enumerate(job.ranges):
+                    def trim_progress(fraction: float, index: int = i) -> None:
+                        update("trimming", round(100 * (index + fraction) / count, 1))
+
+                    trim_progress(0)
+                    clip = target if count == 1 else incoming / f"Clip {i + 1:02d}.{choice.container}"
+                    _make_output(ffmpeg, source, clip, choice.container, span, job.stop, deadline, trim_progress)
+                    _verify(clip, choice, ffprobe, job.stop, deadline)
+                    total += clip.stat().st_size
+                    if total > MAX_FILE_BYTES:
+                        raise DownloadError("The clips exceed the 2 GiB limit.", "Use fewer or shorter ranges.", 413)
+                    clips.append(clip)
+                if count > 1:
+                    update("processing")
+                    _bundle(target, clips, job.stop, deadline)
+            else:
+                if choice.source_container:
+                    _make_output(ffmpeg, source, target, choice.container, None, job.stop, deadline, None)
+                else:
+                    source.replace(target)
+                _verify(target, choice, ffprobe, job.stop, deadline)
+            shutil.rmtree(incoming)
             size = target.stat().st_size
+            if size > MAX_FILE_BYTES:
+                raise DownloadError("The result exceeds the 2 GiB limit.", "Choose a smaller quality or fewer clips.", 413)
+            with self._lock:
+                _check_running(job.stop, deadline)
+                job.status, job.progress, job.size = "ready", 100, size
+                job.finished = time.monotonic()
+            return
+        except _Cancelled:
+            pass
         except DownloadError as exc:
             error, hint = str(exc), exc.hint
         except Exception:  # do not leak tool invocations or server paths via job status
             error, hint = "NexCut could not prepare the file.", "Check the server's media tools and available disk space."
-        finally:
-            if not size:
-                shutil.rmtree(directory, ignore_errors=True)
-            with self._lock:
-                job.size = size
+        shutil.rmtree(directory, ignore_errors=True)
+        with self._lock:
+            job.progress = job.speed = job.eta = None
+            if job.stop.is_set():
+                job.status = "cancelled"
+            else:
+                job.status = "error"
                 job.error, job.hint = error, hint
-                job.progress = 100 if size else None
-                job.speed = job.eta = None
-                job.status = "ready" if size else "error"
-                job.finished = time.monotonic()
+            job.finished = time.monotonic()
