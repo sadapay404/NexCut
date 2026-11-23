@@ -170,6 +170,10 @@ def _choices(info: dict) -> dict[str, Choice]:
                 source_container = f["ext"]
             choices[key] = Choice(key, ext, selector, tier, f"{tier}p · {width} × {height}",
                                   separate, source_container)
+    for tier in (2160, 1440, 1080, 720, 480):
+        key = f"mp4-{tier}"
+        if key not in choices:
+            choices[key] = Choice(key, "mp4", f"bv*[height<={tier}]+ba/b[height<={tier}]/b", tier, f"{tier}p · MP4", True)
     best_audio = next(iter(audio), None) or next((f for f in formats if _codec(f, "acodec")), None)
     if best_audio:
         choices["mp3-audio"] = Choice("mp3-audio", "mp3", best_audio["format_id"], None, "Best available audio")
