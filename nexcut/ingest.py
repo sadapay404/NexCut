@@ -654,10 +654,10 @@ def _via_transcript_api(vid: str, language: str) -> Transcript:
         raise IngestError("youtube-transcript-api is not installed.", "pip install youtube-transcript-api") from exc
     try:
         api = YouTubeTranscriptApi()
-        fetched = api.fetch(vid, languages=[language, "en"])
+        fetched = api.fetch(vid, languages=[language, "en", "en-US", "en-GB"])
         rows = list(fetched)
     except Exception as exc:  # noqa: BLE001
-        raise IngestError("youtube-transcript-api could not fetch captions.", str(exc)[:200]) from exc
+        raise IngestError(f"youtube-transcript-api could not fetch captions ({str(exc)[:160]}).", "Paste the transcript manually.") from exc
     raw = [(float(getattr(r, "start", 0) or 0), str(getattr(r, "text", ""))) for r in rows]
     lines = consolidate([(s, _clean(t)) for s, t in raw if t])
     if not lines:
