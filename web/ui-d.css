@@ -1722,7 +1722,7 @@ kbd {
     linear-gradient(90deg, rgba(34, 197, 94, 0.055) 1px, transparent 1px);
   background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
 }
-.topbar {
+.work-head {
   position: sticky;
   top: 0;
   z-index: 30;
