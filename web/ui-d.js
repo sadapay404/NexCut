@@ -972,18 +972,6 @@
       syncMark();
     }
 
-    var bgBtns = document.querySelectorAll("[data-bg-opt]");
-    var applyBg = function (bg) {
-      var val = /^bg-[1-5]$/.test(bg || "") ? bg : "bg-1";
-      document.documentElement.setAttribute("data-bg", val);
-      try { localStorage.setItem("nexcut_bg", val); } catch (e) {}
-      bgBtns.forEach(function (b) { b.classList.toggle("is-active", b.getAttribute("data-bg-opt") === val); });
-    };
-    try { applyBg(localStorage.getItem("nexcut_bg") || "bg-1"); } catch (e) { applyBg("bg-1"); }
-    bgBtns.forEach(function (b) {
-      b.addEventListener("click", function () { applyBg(b.getAttribute("data-bg-opt")); });
-    });
-
     var dlCard = document.querySelector(".dl-card");
     if (dlCard) {
       dlCard.addEventListener("mousemove", function (e) {

@@ -1712,59 +1712,19 @@ kbd {
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.48);
 }
 
-/* ── 5 right-side background options (bg-1 .. bg-5) ──────────────────── */
-html[data-bg="bg-1"] .work {
-  background:
-    radial-gradient(900px 520px at 82% 8%, rgba(18, 53, 34, 0.55), transparent 65%),
-    radial-gradient(700px 460px at 18% 88%, rgba(13, 38, 24, 0.45), transparent 65%),
-    #0a1a12;
-}
-html[data-bg="bg-2"] .work {
-  background:
-    radial-gradient(850px 500px at 78% 12%, rgba(36, 46, 54, 0.55), transparent 65%),
-    #13171b;
-}
-html[data-bg="bg-3"] .work {
-  background:
-    radial-gradient(880px 540px at 75% 15%, rgba(26, 56, 36, 0.55), transparent 65%),
-    linear-gradient(160deg, #0d1610 0%, #15241a 100%);
-}
-html[data-bg="bg-4"] .work {
-  background-color: #101413;
+/* ── refined Obsidian Grid (.work) + blurred .topbar ─────────────────── */
+.work {
+  background-color: #0e1311;
   background-image:
-    radial-gradient(760px 460px at 80% 10%, rgba(0, 163, 68, 0.12), transparent 65%),
-    linear-gradient(rgba(34, 197, 94, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(34, 197, 94, 0.045) 1px, transparent 1px);
-  background-size: 100% 100%, 28px 28px, 28px 28px;
+    radial-gradient(820px 480px at 84% 6%, rgba(0, 163, 68, 0.14), transparent 64%),
+    radial-gradient(640px 420px at 14% 92%, rgba(16, 68, 42, 0.16), transparent 64%),
+    linear-gradient(rgba(34, 197, 94, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 197, 94, 0.055) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
 }
-html[data-bg="bg-5"] .work {
-  background:
-    radial-gradient(820px 500px at 85% 12%, rgba(16, 51, 37, 0.65), transparent 62%),
-    radial-gradient(760px 480px at 15% 85%, rgba(14, 38, 41, 0.60), transparent 62%),
-    #0b1512;
-}
-.bg-picker {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-.bg-opt {
-  border: 0;
-  background: transparent;
-  color: var(--muted, #9aa69e);
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 8px;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background .18s ease, color .18s ease;
-}
-.bg-opt:hover { color: #fff; }
-.bg-opt.is-active {
-  background: rgba(0, 163, 68, 0.24);
-  color: #4ade80;
+.topbar {
+  background: rgba(10, 14, 12, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
