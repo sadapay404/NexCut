@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360">
+  <defs>
+    <linearGradient id="bg10" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#050806"/>
+      <stop offset="55%" stop-color="#081a0f"/>
+      <stop offset="100%" stop-color="#030504"/>
+    </linearGradient>
+    <radialGradient id="glow10" cx="82%" cy="22%" r="55%">
+      <stop offset="0%" stop-color="#00a344" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#00a344" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="640" height="360" fill="url(#bg10)"/>
+  <rect width="640" height="360" fill="url(#glow10)"/>
+  <path d="M0 290 Q 220 230 640 275 L 640 360 L 0 360 Z" fill="#008a38" fill-opacity="0.14"/>
+  <rect x="20" y="20" width="600" height="320" rx="14" fill="none" stroke="#00a344" stroke-opacity="0.28" stroke-width="1.5"/>
+  <text x="44" y="72" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600" letter-spacing="3" fill="#00bd4f">DIGITAL SHEIKH NEXUS</text>
+  <text x="44" y="205" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="88" font-weight="800" letter-spacing="-2" fill="#f3f8f4">CLIP <tspan fill="#00bd4f">10</tspan></text>
+  <text x="46" y="246" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" letter-spacing="2" fill="#8fa396">1080P · READY TO CUT</text>
+</svg>
