@@ -547,8 +547,10 @@
       dl("dl-start").disabled = locked || !selectedChoice();
       cancelBtn.hidden = !active;
       cancelBtn.disabled = !!active && (active.cancelPending || active.cancelling);
-      moreBtn.disabled = locked || !(selectedChoice("1440p") || selectedChoice("2160p"));
-      moreBtn.classList.toggle("is-active", ["1440p", "2160p"].includes(quality.value) && !!selectedChoice());
+      if (moreBtn) {
+        moreBtn.disabled = locked || !(selectedChoice("1440p") || selectedChoice("2160p"));
+        moreBtn.classList.toggle("is-active", ["1440p", "2160p"].includes(quality.value) && !!selectedChoice());
+      }
       qualityButtons.forEach(function (button) {
         var label = button.dataset.quality;
         var available = !!selectedChoice(label);
@@ -921,7 +923,7 @@
     return {
       setConfig: function (cfg) { dl("dl-invite-field").hidden = !cfg.requires_invite; },
       selectQuality: selectQuality,
-      openMore: function () { if (!moreBtn.disabled) more.hidden = false; },
+      openMore: function () { if (moreBtn && !moreBtn.disabled && more) more.hidden = false; },
       closeMore: function () { more.hidden = true; },
       cancel: cancel,
       addClip: addClip
