@@ -987,6 +987,15 @@
       });
     }
 
+    var clearDlHistBtn = document.getElementById("d-dl-hist-clear");
+    if (clearDlHistBtn) {
+      clearDlHistBtn.addEventListener("click", function () {
+        try { localStorage.removeItem("saa_dl_history_d"); } catch (e) {}
+        document.cookie = "nexcut_dl_history=; path=/; max-age=0; SameSite=Lax";
+        if (window._renderDlHistory) window._renderDlHistory();
+      });
+    }
+
     window._renderDlHistory = function () {
       var hList = document.getElementById("d-dl-hist-list");
       if (!hList) return;
