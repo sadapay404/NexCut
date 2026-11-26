@@ -698,7 +698,12 @@ def _lan_url(port: int) -> str | None:
 
 def serve(port: int | None = None, host: str = "0.0.0.0") -> None:
     port = port or int(os.environ.get("NEXCUT_PORT", "8137"))
-    httpd = ThreadingHTTPServer((host, port), Handler)
+    class NexCutHTTPServer(ThreadingHTTPServer):
+        daemon_threads = True
+        allow_reuse_address = True
+        request_queue_size = 64
+
+    httpd = NexCutHTTPServer((host, port), Handler)
     print(f"[nexcut] v{__version__} on http://localhost:{port}  provider={os.environ.get('NEXCUT_PROVIDER','stub')}")
     lan = _lan_url(port) if host in ("0.0.0.0", "") else None
     if lan:
